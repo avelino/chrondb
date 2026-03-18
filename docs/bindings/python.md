@@ -1,6 +1,6 @@
 # ChronDB Python Binding
 
-Python client for ChronDB, a time-traveling key/value database built on Git architecture.
+Python client for ChronDB, auto-generated from the Rust SDK via [UniFFI](https://github.com/mozilla/uniffi-rs).
 
 ## Requirements
 
@@ -53,7 +53,7 @@ with ChronDB("/tmp/chrondb-data", "/tmp/chrondb-index") as db:
 
 ## API Reference
 
-### `ChronDB(data_path: str, index_path: str)`
+### `ChronDB(data_path: str, index_path: str, idle_timeout: float = None)`
 
 Opens a database connection.
 
@@ -61,6 +61,9 @@ Opens a database connection.
 |-----------|------|-------------|
 | `data_path` | `str` | Path for the Git repository (data storage) |
 | `index_path` | `str` | Path for the Lucene index |
+| `idle_timeout` | `Optional[float]` | Seconds of inactivity before suspending the GraalVM isolate. `None` (default) keeps it alive for the entire lifetime. |
+
+When `idle_timeout` is set, the GraalVM isolate is automatically closed after the specified seconds of inactivity, freeing CPU and memory. The next operation transparently reopens it. See [Idle Timeout](#idle-timeout-long-running-services) for details.
 
 **Raises:** `ChronDBError` if the database cannot be opened.
 
@@ -271,6 +274,32 @@ with ChronDB("/tmp/data", "/tmp/index") as db:
     for entry in entries:
         print(entry)
 ```
+
+### Idle Timeout (long-running services)
+
+ChronDB loads a GraalVM native-image shared library whose internal threads consume CPU even when no operations are in flight. For long-running services with sporadic database access, use `idle_timeout` to automatically suspend the isolate when idle:
+
+```python
+from chrondb import ChronDB
+
+# Isolate suspends after 2 minutes of inactivity
+db = ChronDB("/tmp/data", "/tmp/index", idle_timeout=120)
+
+# Normal usage — no change in API
+db.put("audit:1", {"action": "login"})
+doc = db.get("audit:1")
+
+# After 120s without operations, the GraalVM isolate is torn down.
+# The next call to put/get/query transparently reopens it.
+```
+
+**When to use:**
+- Long-running daemons that write to ChronDB intermittently (e.g., audit logging, MCP servers)
+- Services where memory/CPU usage matters during idle periods
+
+**When NOT to use:**
+- Short-lived scripts (just use `ChronDB(...)` without timeout)
+- High-throughput services with constant database access (the isolate would never go idle)
 
 ### Pytest Fixture
 

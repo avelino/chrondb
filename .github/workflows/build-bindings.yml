@@ -1,0 +1,240 @@
+name: Build Language Bindings
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "bindings/**"
+      - "java/**"
+      - "src/chrondb/lib/**"
+  pull_request:
+    paths:
+      - "bindings/**"
+      - "java/**"
+      - "src/chrondb/lib/**"
+
+jobs:
+  build-native-lib:
+    runs-on: ${{ matrix.os }}
+    name: "Build libchrondb on ${{ matrix.os }}"
+    strategy:
+      matrix:
+        os: ["macos-14", "ubuntu-22.04"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeLaGuardo/setup-clojure@13.4
+        with:
+          cli: 1.12.3.1577
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: "graalvm"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build shared library
+        run: |
+          clojure -M:shared-lib
+          native-image @target/shared-image-args
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libchrondb-${{ runner.os }}
+          path: |
+            target/libchrondb.*
+            target/graal_isolate.h
+            target/graal_isolate_dynamic.h
+            target/libchrondb.h
+            target/libchrondb_dynamic.h
+
+  test-rust-sdk:
+    needs: build-native-lib
+    runs-on: ubuntu-22.04
+    name: "Test Rust SDK"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Run Rust SDK tests
+        working-directory: bindings/rust
+        env:
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/target
+          RUST_MIN_STACK: "67108864"
+        run: cargo test
+
+  build-uniffi:
+    needs: test-rust-sdk
+    runs-on: ubuntu-22.04
+    name: "Build UniFFI bindings"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build UniFFI cdylib
+        working-directory: bindings/uniffi
+        env:
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/target
+        run: cargo build --release
+
+      - name: Generate bindings for all languages
+        working-directory: bindings/uniffi
+        run: |
+          mkdir -p generated
+          cargo run --release --bin uniffi-bindgen generate \
+            --library target/release/libchrondb_uniffi.so \
+            --language python \
+            --language ruby \
+            --language kotlin \
+            --language swift \
+            --out-dir generated/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uniffi-bindings
+          path: |
+            bindings/uniffi/generated/
+            bindings/uniffi/target/release/libchrondb_uniffi.so
+
+  test-python:
+    needs: [build-native-lib, build-uniffi]
+    runs-on: ubuntu-22.04
+    name: "Test Python (UniFFI)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniffi-bindings
+          path: bindings/uniffi/
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Setup Python package
+        working-directory: bindings/python
+        run: |
+          # Copy generated code and shared library
+          cp ../uniffi/generated/chrondb.py chrondb/_generated/
+          mkdir -p chrondb/lib
+          cp ../uniffi/target/release/libchrondb_uniffi.so chrondb/lib/
+          cp ${{ github.workspace }}/target/libchrondb.so chrondb/lib/
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Run Python tests
+        working-directory: bindings/python
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/python/chrondb/lib
+        run: pytest tests/ -v
+
+  test-ruby-uniffi:
+    needs: [build-native-lib, build-uniffi]
+    runs-on: ubuntu-22.04
+    name: "Test Ruby (UniFFI)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniffi-bindings
+          path: bindings/uniffi/
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Setup Ruby package
+        working-directory: bindings/ruby
+        run: |
+          cp ../uniffi/generated/chrondb.rb lib/chrondb_generated.rb
+          mkdir -p lib
+          cp ../uniffi/target/release/libchrondb_uniffi.so lib/
+          cp ${{ github.workspace }}/target/libchrondb.so lib/
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Run Ruby tests
+        working-directory: bindings/ruby
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/ruby/lib
+        run: ruby test/test_chrondb.rb
+
+  test-node:
+    needs: build-native-lib
+    runs-on: ubuntu-22.04
+    name: "Test Node.js (NAPI-RS)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Build Node.js binding
+        working-directory: bindings/node
+        env:
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/target
+        run: |
+          npm install
+          npx napi build --release
+
+      - name: Run Node.js tests
+        working-directory: bindings/node
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target
+        run: npm test

@@ -1,0 +1,43 @@
+namespace chrondb {};
+
+[Error]
+interface ChronDBError {
+    SetupFailed(string msg);
+    IsolateCreationFailed();
+    OpenFailed(string msg);
+    CloseFailed();
+    NotFound();
+    OperationFailed(string msg);
+    JsonError(string msg);
+};
+
+interface ChronDB {
+    [Throws=ChronDBError, Name=open]
+    constructor(string data_path, string index_path);
+
+    [Throws=ChronDBError, Name=open_with_idle_timeout]
+    constructor(string data_path, string index_path, u64 idle_timeout_secs);
+
+    [Throws=ChronDBError]
+    string put(string id, string json_doc, string? branch);
+
+    [Throws=ChronDBError]
+    string get(string id, string? branch);
+
+    [Throws=ChronDBError]
+    void delete(string id, string? branch);
+
+    [Throws=ChronDBError]
+    string list_by_prefix(string prefix, string? branch);
+
+    [Throws=ChronDBError]
+    string list_by_table(string table, string? branch);
+
+    [Throws=ChronDBError]
+    string history(string id, string? branch);
+
+    [Throws=ChronDBError]
+    string query(string query_json, string? branch);
+
+    string? last_error();
+};
