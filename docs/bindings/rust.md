@@ -99,7 +99,7 @@ fn main() -> chrondb::Result<()> {
 
 ### `ChronDB::open(data_path, index_path) -> Result<ChronDB>`
 
-Opens a database connection.
+Opens a database connection. The GraalVM isolate stays alive for the entire lifetime of the instance.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -109,6 +109,48 @@ Opens a database connection.
 **Returns:** `Result<ChronDB>`
 
 **Errors:** `IsolateCreationFailed`, `OpenFailed(reason)`
+
+---
+
+### `ChronDB::builder(data_path, index_path) -> ChronDBBuilder`
+
+Creates a builder for opening a database with custom options like idle timeout.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `data_path` | `&str` | Path for the Git repository (data storage) |
+| `index_path` | `&str` | Path for the Lucene index |
+
+**Returns:** `ChronDBBuilder`
+
+#### `ChronDBBuilder::idle_timeout(duration) -> Self`
+
+Sets the idle timeout for the GraalVM isolate. When no operations happen for the specified duration, the isolate is automatically closed to free CPU and memory. The next operation transparently reopens it.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `duration` | `Duration` | Max idle time before suspending the isolate |
+
+#### `ChronDBBuilder::open() -> Result<ChronDB>`
+
+Opens the database with the configured options.
+
+**Errors:** `IsolateCreationFailed`, `OpenFailed(reason)`
+
+#### Example
+
+```rust
+use chrondb::ChronDB;
+use std::time::Duration;
+
+let db = ChronDB::builder("/tmp/data", "/tmp/index")
+    .idle_timeout(Duration::from_secs(120))
+    .open()?;
+
+// Use normally — isolate suspends after 120s of inactivity,
+// reopens transparently on next operation.
+db.put("user:1", &json!({"name": "Alice"}), None)?;
+```
 
 ---
 
@@ -372,6 +414,40 @@ fn do_work() -> chrondb::Result<()> {
     // db is dropped here, closing the connection
 }
 ```
+
+### Idle Timeout (long-running services)
+
+ChronDB loads a GraalVM native-image shared library whose internal threads consume CPU even when no operations are in flight. For long-running services with sporadic database access, use `idle_timeout` to automatically suspend the isolate when idle:
+
+```rust
+use chrondb::ChronDB;
+use serde_json::json;
+use std::time::Duration;
+
+fn main() -> chrondb::Result<()> {
+    // Isolate suspends after 2 minutes of inactivity
+    let db = ChronDB::builder("/tmp/data", "/tmp/index")
+        .idle_timeout(Duration::from_secs(120))
+        .open()?;
+
+    // Normal usage — no change in API
+    db.put("audit:1", &json!({"action": "login"}), None)?;
+    let doc = db.get("audit:1", None)?;
+
+    // After 120s without operations, the GraalVM isolate is torn down.
+    // The next call to put/get/query transparently reopens it.
+
+    Ok(())
+}
+```
+
+**When to use:**
+- Long-running daemons that write to ChronDB intermittently (e.g., audit logging, MCP servers)
+- Services where memory/CPU usage matters during idle periods
+
+**When NOT to use:**
+- Short-lived CLI tools (just use `ChronDB::open`)
+- High-throughput services with constant database access (the isolate would never go idle)
 
 ## Building from Source
 
