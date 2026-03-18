@@ -34,8 +34,13 @@
 
 ## Language Bindings
 
-* [Python](bindings/python.md)
+* [Overview](bindings/overview.md)
 * [Rust](bindings/rust.md)
+* [Python](bindings/python.md)
+* [Ruby](bindings/ruby.md)
+* [Node.js](bindings/nodejs.md)
+* [Kotlin](bindings/kotlin.md)
+* [Swift](bindings/swift.md)
 
 ## Operations
 

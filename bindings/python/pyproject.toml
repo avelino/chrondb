@@ -1,20 +1,19 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "chrondb"
-version = "0.1.0"
-description = "Python bindings for ChronDB - a time-traveling key/value database"
+version = "0.2.0"
+description = "Python client for ChronDB — a time-traveling key/value database"
 license = {text = "AGPL-3.0"}
 requires-python = ">=3.8"
-readme = "README.md"
 
-[project.urls]
-Repository = "https://github.com/avelino/chrondb"
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["chrondb*"]
 
 [tool.setuptools.package-data]
-chrondb = ["lib/*"]
+chrondb = ["*.so", "*.dylib"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

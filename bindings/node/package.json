@@ -1,0 +1,25 @@
+{
+  "name": "chrondb",
+  "version": "0.1.0",
+  "description": "Node.js client for ChronDB — a time-traveling key/value database",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/avelino/chrondb"
+  },
+  "napi": {
+    "name": "chrondb",
+    "triples": {
+      "defaults": true
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "scripts": {
+    "build": "napi build --release",
+    "test": "node __test__/test.mjs"
+  }
+}

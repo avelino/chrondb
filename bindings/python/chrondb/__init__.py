@@ -1,6 +1,6 @@
-"""ChronDB Python bindings - a time-traveling key/value database."""
+"""ChronDB Python bindings — auto-generated from Rust SDK via UniFFI."""
 
-from chrondb.client import ChronDB
+from chrondb._wrapper import ChronDB, ChronDBError, DocumentNotFoundError
 
-__all__ = ["ChronDB"]
-__version__ = "0.1.0"
+__all__ = ["ChronDB", "ChronDBError", "DocumentNotFoundError"]
+__version__ = "0.2.0"
