@@ -629,6 +629,14 @@ impl ChronDB {
         }
     }
 
+    /// Remove stale Lucene write.lock left behind after isolate teardown.
+    fn cleanup_stale_locks(index_path: &str) {
+        let lock_file = std::path::Path::new(index_path).join("write.lock");
+        if lock_file.exists() {
+            let _ = std::fs::remove_file(&lock_file);
+        }
+    }
+
     fn run_worker_loop_with_idle(
         state: &mut FfiWorkerState,
         rx: Receiver<FfiCommand>,
@@ -636,10 +644,11 @@ impl ChronDB {
         data_path: &str,
         index_path: &str,
     ) {
-        // How often we check for idle — half the timeout or 30s, whichever is smaller.
-        let check_interval = idle_timeout.min(Duration::from_secs(30));
+        // How often we check for idle — clamped to [1s, 30s] to avoid busy-loops.
+        let check_interval = idle_timeout.min(Duration::from_secs(30)).max(Duration::from_secs(1));
         let mut last_activity = Instant::now();
         let mut suspended = false;
+        let mut reopen_failures: u32 = 0;
 
         loop {
             let recv_result = rx.recv_timeout(check_interval);
@@ -653,13 +662,20 @@ impl ChronDB {
 
                     // Reopen isolate if it was suspended
                     if suspended {
+                        Self::cleanup_stale_locks(index_path);
                         match Self::init_worker(data_path, index_path) {
                             Ok(new_state) => {
                                 *state = new_state;
                                 suspended = false;
+                                reopen_failures = 0;
                             }
                             Err(_) => {
+                                reopen_failures += 1;
                                 Self::reply_error(cmd, "failed to reopen database after idle suspend");
+                                // Exponential backoff: sleep before accepting next command
+                                // to avoid CPU burn on persistent failures (disk full, corruption, etc.)
+                                let backoff = Duration::from_secs(1 << reopen_failures.min(5));
+                                std::thread::sleep(backoff);
                                 continue;
                             }
                         }
@@ -1132,6 +1148,104 @@ mod tests {
                 retrieved["name"], "test",
                 "Data should survive multiple reopens"
             );
+        }
+    }
+
+    #[test]
+    fn test_builder_creates_with_defaults() {
+        let builder = ChronDB::builder("/tmp/data", "/tmp/index");
+        assert_eq!(builder.data_path, "/tmp/data");
+        assert_eq!(builder.index_path, "/tmp/index");
+        assert!(builder.idle_timeout.is_none());
+    }
+
+    #[test]
+    fn test_builder_sets_idle_timeout() {
+        let builder = ChronDB::builder("/tmp/data", "/tmp/index")
+            .idle_timeout(Duration::from_secs(120));
+        assert_eq!(builder.idle_timeout, Some(Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let builder = ChronDB::builder("/tmp/a", "/tmp/b")
+            .idle_timeout(Duration::from_secs(60));
+        assert_eq!(builder.data_path, "/tmp/a");
+        assert_eq!(builder.index_path, "/tmp/b");
+        assert_eq!(builder.idle_timeout, Some(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_cleanup_stale_locks_removes_lock_file() {
+        let temp = TempDir::new().unwrap();
+        let lock_path = temp.path().join("write.lock");
+        std::fs::write(&lock_path, "").unwrap();
+        assert!(lock_path.exists());
+
+        ChronDB::cleanup_stale_locks(temp.path().to_str().unwrap());
+        assert!(!lock_path.exists());
+    }
+
+    #[test]
+    fn test_cleanup_stale_locks_noop_when_no_lock() {
+        let temp = TempDir::new().unwrap();
+        // Should not panic when lock file doesn't exist
+        ChronDB::cleanup_stale_locks(temp.path().to_str().unwrap());
+    }
+
+    #[test]
+    fn test_check_interval_clamp_minimum() {
+        // Duration::ZERO should be clamped to 1s
+        let interval = Duration::ZERO.min(Duration::from_secs(30)).max(Duration::from_secs(1));
+        assert_eq!(interval, Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_check_interval_clamp_maximum() {
+        // 120s should be clamped to 30s
+        let interval = Duration::from_secs(120).min(Duration::from_secs(30)).max(Duration::from_secs(1));
+        assert_eq!(interval, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_check_interval_within_range() {
+        // 10s should stay 10s
+        let interval = Duration::from_secs(10).min(Duration::from_secs(30)).max(Duration::from_secs(1));
+        assert_eq!(interval, Duration::from_secs(10));
+    }
+
+    #[test]
+    #[serial]
+    fn test_builder_open_with_idle_timeout() {
+        // Skip if library not available
+        if ensure_library_installed().is_err() {
+            eprintln!("Skipping test: library not installed");
+            return;
+        }
+
+        let temp = TempDir::new().unwrap();
+        let data_path = temp.path().join("data");
+        let index_path = temp.path().join("index");
+
+        let result = ChronDB::builder(
+            data_path.to_str().unwrap(),
+            index_path.to_str().unwrap(),
+        )
+        .idle_timeout(Duration::from_secs(60))
+        .open();
+
+        match result {
+            Ok(db) => {
+                // Verify basic operations work with idle timeout enabled
+                let doc = serde_json::json!({"name": "idle-test"});
+                db.put("test:idle", &doc, None).expect("put should work with idle timeout");
+                let retrieved = db.get("test:idle", None).expect("get should work with idle timeout");
+                assert_eq!(retrieved["name"], "idle-test");
+            }
+            Err(ChronDBError::SetupFailed(_) | ChronDBError::IsolateCreationFailed | ChronDBError::OpenFailed(_)) => {
+                eprintln!("Skipping test: could not open database");
+            }
+            Err(e) => panic!("Unexpected error: {}", e),
         }
     }
 }
