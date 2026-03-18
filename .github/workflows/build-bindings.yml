@@ -159,7 +159,8 @@ jobs:
       - name: Run Python tests
         working-directory: bindings/python
         env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/python/chrondb/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/python/chrondb/_generated:${{ github.workspace }}/bindings/python/chrondb/lib
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/bindings/python/chrondb/lib
         run: pytest tests/ -v
 
   test-ruby-uniffi:
@@ -203,6 +204,7 @@ jobs:
         working-directory: bindings/ruby
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/ruby/lib
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/bindings/ruby/lib
         run: ruby test/test_chrondb.rb
 
   test-node:
