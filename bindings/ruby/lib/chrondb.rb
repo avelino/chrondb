@@ -25,11 +25,11 @@ module ChronDB
     # @param idle_timeout [Integer, nil] Seconds of inactivity before suspending
     def initialize(data_path, index_path, idle_timeout: nil)
       @inner = if idle_timeout
-                 Chrondb::ChronDB.open_with_idle_timeout(data_path, index_path, idle_timeout)
+                 Chrondb::ChronDb.open_with_idle_timeout(data_path, index_path, idle_timeout)
                else
-                 Chrondb::ChronDB.open(data_path, index_path)
+                 Chrondb::ChronDb.open(data_path, index_path)
                end
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -42,9 +42,9 @@ module ChronDB
     def put(id, doc, branch: nil)
       result = @inner.put(id, JSON.generate(doc), branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError::NotFound => e
+    rescue ::ChronDbError::NotFound => e
       raise DocumentNotFoundError, e.message
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -57,9 +57,9 @@ module ChronDB
     def get(id, branch: nil)
       result = @inner.get(id, branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError::NotFound => e
+    rescue ::ChronDbError::NotFound => e
       raise DocumentNotFoundError, e.message
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -72,9 +72,9 @@ module ChronDB
     def delete(id, branch: nil)
       @inner.delete(id, branch)
       true
-    rescue Chrondb::ChronDBError::NotFound => e
+    rescue ::ChronDbError::NotFound => e
       raise DocumentNotFoundError, e.message
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -86,7 +86,7 @@ module ChronDB
     def list_by_prefix(prefix, branch: nil)
       result = @inner.list_by_prefix(prefix, branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -98,7 +98,7 @@ module ChronDB
     def list_by_table(table, branch: nil)
       result = @inner.list_by_table(table, branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -110,7 +110,7 @@ module ChronDB
     def history(id, branch: nil)
       result = @inner.history(id, branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
 
@@ -122,7 +122,7 @@ module ChronDB
     def query(query, branch: nil)
       result = @inner.query(JSON.generate(query), branch)
       JSON.parse(result)
-    rescue Chrondb::ChronDBError => e
+    rescue ::ChronDbError => e
       raise Error, e.message
     end
   end

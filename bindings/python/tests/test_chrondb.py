@@ -1,18 +1,16 @@
 """Integration tests for ChronDB Python bindings (UniFFI)."""
 
-import os
-
 import pytest
 
-_lib_available = bool(os.environ.get("CHRONDB_LIB_PATH")) or os.path.exists(
-    os.path.join(os.path.expanduser("~"), ".chrondb", "lib")
-)
+try:
+    from chrondb import ChronDB, ChronDBError, DocumentNotFoundError
+    _lib_available = True
+except (ImportError, OSError):
+    _lib_available = False
 
 _skip_no_lib = pytest.mark.skipif(
     not _lib_available, reason="ChronDB shared library not available"
 )
-
-from chrondb import ChronDB, ChronDBError, DocumentNotFoundError
 
 
 @_skip_no_lib

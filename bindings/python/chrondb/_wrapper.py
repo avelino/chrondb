@@ -20,9 +20,9 @@ class DocumentNotFoundError(ChronDBError):
     pass
 
 
-def _convert_error(e: _ffi.ChronDBError) -> ChronDBError:
+def _convert_error(e: _ffi.ChronDbError) -> ChronDBError:
     """Convert UniFFI error to Pythonic exception."""
-    if isinstance(e, _ffi.ChronDBError.NotFound):
+    if isinstance(e, _ffi.ChronDbError.NotFound):
         return DocumentNotFoundError(str(e))
     return ChronDBError(str(e))
 
@@ -54,11 +54,11 @@ class ChronDB:
         """
         try:
             if idle_timeout is not None:
-                self._inner = _ffi.ChronDB.open_with_idle_timeout(
+                self._inner = _ffi.ChronDb.open_with_idle_timeout(
                     data_path, index_path, idle_timeout)
             else:
-                self._inner = _ffi.ChronDB.open(data_path, index_path)
-        except _ffi.ChronDBError as e:
+                self._inner = _ffi.ChronDb.open(data_path, index_path)
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def __enter__(self):
@@ -82,7 +82,7 @@ class ChronDB:
         try:
             result = self._inner.put(id, json.dumps(doc), branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def get(self, id: str, branch: Optional[str] = None) -> Dict[str, Any]:
@@ -101,7 +101,7 @@ class ChronDB:
         try:
             result = self._inner.get(id, branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def delete(self, id: str, branch: Optional[str] = None) -> bool:
@@ -120,7 +120,7 @@ class ChronDB:
         try:
             self._inner.delete(id, branch)
             return True
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def list_by_prefix(self, prefix: str,
@@ -129,7 +129,7 @@ class ChronDB:
         try:
             result = self._inner.list_by_prefix(prefix, branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def list_by_table(self, table: str,
@@ -138,7 +138,7 @@ class ChronDB:
         try:
             result = self._inner.list_by_table(table, branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def history(self, id: str,
@@ -147,7 +147,7 @@ class ChronDB:
         try:
             result = self._inner.history(id, branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
     def query(self, query: Dict[str, Any],
@@ -156,5 +156,5 @@ class ChronDB:
         try:
             result = self._inner.query(json.dumps(query), branch)
             return json.loads(result)
-        except _ffi.ChronDBError as e:
+        except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
