@@ -646,6 +646,11 @@ impl ChronDB {
 
             match recv_result {
                 Ok(cmd) => {
+                    // Shutdown must always exit, even if suspended
+                    if matches!(cmd, FfiCommand::Shutdown) {
+                        break;
+                    }
+
                     // Reopen isolate if it was suspended
                     if suspended {
                         match Self::init_worker(data_path, index_path) {
@@ -654,7 +659,6 @@ impl ChronDB {
                                 suspended = false;
                             }
                             Err(_) => {
-                                // Send error to the caller for commands that have a reply channel
                                 Self::reply_error(cmd, "failed to reopen database after idle suspend");
                                 continue;
                             }
