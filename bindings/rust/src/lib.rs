@@ -672,10 +672,15 @@ impl ChronDB {
                             Err(_) => {
                                 reopen_failures += 1;
                                 Self::reply_error(cmd, "failed to reopen database after idle suspend");
-                                // Exponential backoff: sleep before accepting next command
-                                // to avoid CPU burn on persistent failures (disk full, corruption, etc.)
+                                // Exponential backoff via recv_timeout instead of sleep,
+                                // so Shutdown commands are still processed during the wait.
                                 let backoff = Duration::from_secs(1 << reopen_failures.min(5));
-                                std::thread::sleep(backoff);
+                                if let Ok(cmd) = rx.recv_timeout(backoff) {
+                                    if matches!(cmd, FfiCommand::Shutdown) {
+                                        break;
+                                    }
+                                    Self::reply_error(cmd, "database unavailable after reopen failure");
+                                }
                                 continue;
                             }
                         }

@@ -9,7 +9,7 @@ class ChronDB {
    * @param {number} [options.idleTimeout] - Seconds of inactivity before suspending the isolate
    */
   constructor(dataPath, indexPath, options = {}) {
-    if (options.idleTimeout) {
+    if (options.idleTimeout != null) {
       this._inner = ChronDBNative.openWithIdleTimeout(dataPath, indexPath, options.idleTimeout)
     } else {
       this._inner = ChronDBNative.open(dataPath, indexPath)
