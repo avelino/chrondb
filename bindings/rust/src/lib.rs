@@ -34,9 +34,10 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::ptr;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use ffi::graal_isolate_t;
 use ffi::graal_isolatethread_t;
@@ -397,9 +398,61 @@ impl ChronDB {
         }
 
         // Create new worker
-        let shared = Self::create_new_worker(data_path, index_path, key.clone())?;
+        let shared = Self::create_new_worker(data_path, index_path, key.clone(), None)?;
 
         // Register the new worker
+        {
+            let mut registry = get_worker_registry()
+                .lock()
+                .map_err(|_| ChronDBError::IsolateCreationFailed)?;
+            registry.insert(key, Arc::downgrade(&shared));
+        }
+
+        Ok(ChronDB { shared })
+    }
+
+    /// Creates a builder for opening a ChronDB database with custom options.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use chrondb::ChronDB;
+    /// use std::time::Duration;
+    ///
+    /// let db = ChronDB::builder("/tmp/data", "/tmp/index")
+    ///     .idle_timeout(Duration::from_secs(120))
+    ///     .open()
+    ///     .unwrap();
+    /// ```
+    pub fn builder(data_path: &str, index_path: &str) -> ChronDBBuilder {
+        ChronDBBuilder {
+            data_path: data_path.to_string(),
+            index_path: index_path.to_string(),
+            idle_timeout: None,
+        }
+    }
+
+    fn open_with_options(data_path: &str, index_path: &str, idle_timeout: Option<Duration>) -> Result<Self> {
+        let data_path_buf = std::fs::canonicalize(data_path)
+            .unwrap_or_else(|_| PathBuf::from(data_path));
+        let index_path_buf = std::fs::canonicalize(index_path)
+            .unwrap_or_else(|_| PathBuf::from(index_path));
+        let key = (data_path_buf.clone(), index_path_buf.clone());
+
+        {
+            let registry = get_worker_registry()
+                .lock()
+                .map_err(|_| ChronDBError::IsolateCreationFailed)?;
+
+            if let Some(weak) = registry.get(&key) {
+                if let Some(shared) = weak.upgrade() {
+                    return Ok(ChronDB { shared });
+                }
+            }
+        }
+
+        let shared = Self::create_new_worker(data_path, index_path, key.clone(), idle_timeout)?;
+
         {
             let mut registry = get_worker_registry()
                 .lock()
@@ -414,6 +467,7 @@ impl ChronDB {
         data_path: &str,
         index_path: &str,
         key: (PathBuf, PathBuf),
+        idle_timeout: Option<Duration>,
     ) -> Result<Arc<SharedWorker>> {
         let (tx, rx): (Sender<FfiCommand>, Receiver<FfiCommand>) = mpsc::channel();
 
@@ -433,7 +487,16 @@ impl ChronDB {
                 match init_result {
                     Ok(mut state) => {
                         let _ = init_tx.send(Ok(()));
-                        Self::run_worker_loop(&mut state, rx);
+                        match idle_timeout {
+                            Some(timeout) => Self::run_worker_loop_with_idle(
+                                &mut state,
+                                rx,
+                                timeout,
+                                &data_path_str,
+                                &index_path_str,
+                            ),
+                            None => Self::run_worker_loop(&mut state, rx),
+                        }
                         state.close();
                     }
                     Err(e) => {
@@ -503,59 +566,130 @@ impl ChronDB {
         })
     }
 
+    fn dispatch_command(state: &mut FfiWorkerState, cmd: FfiCommand) -> bool {
+        match cmd {
+            FfiCommand::Put {
+                id,
+                doc,
+                branch,
+                reply,
+            } => {
+                let result = state.handle_put(&id, &doc, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::Get { id, branch, reply } => {
+                let result = state.handle_get(&id, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::Delete { id, branch, reply } => {
+                let result = state.handle_delete(&id, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::ListByPrefix {
+                prefix,
+                branch,
+                reply,
+            } => {
+                let result = state.handle_list_by_prefix(&prefix, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::ListByTable {
+                table,
+                branch,
+                reply,
+            } => {
+                let result = state.handle_list_by_table(&table, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::History { id, branch, reply } => {
+                let result = state.handle_history(&id, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::Query {
+                query,
+                branch,
+                reply,
+            } => {
+                let result = state.handle_query(&query, branch.as_deref());
+                let _ = reply.send(result);
+            }
+            FfiCommand::LastError { reply } => {
+                let _ = reply.send(state.get_last_error());
+            }
+            FfiCommand::Shutdown => return true,
+        }
+        false
+    }
+
     fn run_worker_loop(state: &mut FfiWorkerState, rx: Receiver<FfiCommand>) {
         while let Ok(cmd) = rx.recv() {
-            match cmd {
-                FfiCommand::Put {
-                    id,
-                    doc,
-                    branch,
-                    reply,
-                } => {
-                    let result = state.handle_put(&id, &doc, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::Get { id, branch, reply } => {
-                    let result = state.handle_get(&id, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::Delete { id, branch, reply } => {
-                    let result = state.handle_delete(&id, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::ListByPrefix {
-                    prefix,
-                    branch,
-                    reply,
-                } => {
-                    let result = state.handle_list_by_prefix(&prefix, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::ListByTable {
-                    table,
-                    branch,
-                    reply,
-                } => {
-                    let result = state.handle_list_by_table(&table, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::History { id, branch, reply } => {
-                    let result = state.handle_history(&id, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::Query {
-                    query,
-                    branch,
-                    reply,
-                } => {
-                    let result = state.handle_query(&query, branch.as_deref());
-                    let _ = reply.send(result);
-                }
-                FfiCommand::LastError { reply } => {
-                    let _ = reply.send(state.get_last_error());
-                }
-                FfiCommand::Shutdown => break,
+            if Self::dispatch_command(state, cmd) {
+                break;
             }
+        }
+    }
+
+    fn run_worker_loop_with_idle(
+        state: &mut FfiWorkerState,
+        rx: Receiver<FfiCommand>,
+        idle_timeout: Duration,
+        data_path: &str,
+        index_path: &str,
+    ) {
+        // How often we check for idle — half the timeout or 30s, whichever is smaller.
+        let check_interval = idle_timeout.min(Duration::from_secs(30));
+        let mut last_activity = Instant::now();
+        let mut suspended = false;
+
+        loop {
+            let recv_result = rx.recv_timeout(check_interval);
+
+            match recv_result {
+                Ok(cmd) => {
+                    // Reopen isolate if it was suspended
+                    if suspended {
+                        match Self::init_worker(data_path, index_path) {
+                            Ok(new_state) => {
+                                *state = new_state;
+                                suspended = false;
+                            }
+                            Err(_) => {
+                                // Send error to the caller for commands that have a reply channel
+                                Self::reply_error(cmd, "failed to reopen database after idle suspend");
+                                continue;
+                            }
+                        }
+                    }
+
+                    last_activity = Instant::now();
+                    if Self::dispatch_command(state, cmd) {
+                        break;
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    if !suspended && last_activity.elapsed() >= idle_timeout {
+                        state.close();
+                        suspended = true;
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    }
+
+    /// Send an error reply for a command when the isolate failed to reopen.
+    fn reply_error(cmd: FfiCommand, msg: &str) {
+        let err = ChronDBError::OperationFailed(msg.to_string());
+        match cmd {
+            FfiCommand::Put { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Get { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Delete { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::ListByPrefix { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::ListByTable { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::History { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Query { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::LastError { reply, .. } => { let _ = reply.send(None); }
+            FfiCommand::Shutdown => {}
         }
     }
 
@@ -725,6 +859,36 @@ impl ChronDB {
 // Drop is handled automatically via Arc<SharedWorker>
 // When all ChronDB instances for a path pair are dropped,
 // SharedWorker::drop() is called, which shuts down the worker thread.
+
+/// Builder for opening a ChronDB database with custom options.
+///
+/// Use [`ChronDB::builder`] to create a builder.
+pub struct ChronDBBuilder {
+    data_path: String,
+    index_path: String,
+    idle_timeout: Option<Duration>,
+}
+
+impl ChronDBBuilder {
+    /// Sets the idle timeout for the GraalVM isolate.
+    ///
+    /// When set, the underlying GraalVM isolate is automatically closed after
+    /// the specified duration of inactivity, freeing CPU and memory. The next
+    /// operation transparently reopens it.
+    ///
+    /// Without this, the isolate stays alive as long as the `ChronDB` instance
+    /// exists — which is fine for short-lived processes but wasteful for
+    /// long-running services with sporadic access patterns.
+    pub fn idle_timeout(mut self, timeout: Duration) -> Self {
+        self.idle_timeout = Some(timeout);
+        self
+    }
+
+    /// Opens the database with the configured options.
+    pub fn open(self) -> Result<ChronDB> {
+        ChronDB::open_with_options(&self.data_path, &self.index_path, self.idle_timeout)
+    }
+}
 
 #[cfg(test)]
 mod tests {
