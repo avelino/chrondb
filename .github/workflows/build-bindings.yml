@@ -142,10 +142,12 @@ jobs:
       - name: Setup Python package
         working-directory: bindings/python
         run: |
-          # Copy generated code and shared library
+          # Copy generated code
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
+          # Copy shared libraries next to generated code (where UniFFI looks)
+          cp ../uniffi/target/release/libchrondb_uniffi.so chrondb/_generated/
+          # Also copy libchrondb.so (GraalVM core) to a discoverable path
           mkdir -p chrondb/lib
-          cp ../uniffi/target/release/libchrondb_uniffi.so chrondb/lib/
           cp ${{ github.workspace }}/target/libchrondb.so chrondb/lib/
 
       - name: Configure Git
@@ -181,11 +183,13 @@ jobs:
         with:
           ruby-version: "3.3"
 
+      - name: Install Ruby dependencies
+        run: gem install ffi
+
       - name: Setup Ruby package
         working-directory: bindings/ruby
         run: |
           cp ../uniffi/generated/chrondb.rb lib/chrondb_generated.rb
-          mkdir -p lib
           cp ../uniffi/target/release/libchrondb_uniffi.so lib/
           cp ${{ github.workspace }}/target/libchrondb.so lib/
 

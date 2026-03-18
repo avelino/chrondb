@@ -12,4 +12,6 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.required_ruby_version = ">= 3.0"
+
+  s.add_dependency "ffi", "~> 1.15"
 end

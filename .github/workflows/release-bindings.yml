@@ -205,13 +205,13 @@ jobs:
           VERSION: ${{ needs.build-native-lib.outputs.version }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
-          # Copy generated Python code
+          # Copy generated Python code and UniFFI shared library next to it
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
+          cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/_generated/
 
-          # Bundle native libraries
+          # Bundle GraalVM core library
           mkdir -p chrondb/lib
           cp ${{ github.workspace }}/target/libchrondb.${{ matrix.lib_ext }} chrondb/lib/
-          cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/lib/
 
           # Set version
           if [ "$VERSION" != "latest" ]; then
