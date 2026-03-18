@@ -2,11 +2,14 @@
 
 require "minitest/autorun"
 require "tmpdir"
-require_relative "../lib/chrondb"
 
-# Skip all tests if shared library is not available
-LIB_AVAILABLE = File.exist?(File.join(Dir.home, ".chrondb", "lib")) ||
-                ENV["CHRONDB_LIB_PATH"]
+# Detect if the generated binding and shared library are available
+LIB_AVAILABLE = begin
+  require_relative "../lib/chrondb"
+  true
+rescue LoadError
+  false
+end
 
 class TestChronDB < Minitest::Test
   def setup
