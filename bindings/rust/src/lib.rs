@@ -936,6 +936,13 @@ impl ChronDB {
             .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
     }
 
+    /// Executes a SQL query against the database.
+    ///
+    /// Convenience alias for [`execute_sql`](Self::execute_sql).
+    pub fn execute(&self, sql: &str, branch: Option<&str>) -> Result<serde_json::Value> {
+        self.execute_sql(sql, branch)
+    }
+
     /// Returns the last error message from the native library, if any.
     pub fn last_error(&self) -> Option<String> {
         let (reply_tx, reply_rx) = mpsc::channel();

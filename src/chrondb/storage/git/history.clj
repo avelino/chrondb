@@ -33,8 +33,8 @@
    Falls back to constructing expected paths if the document was deleted from HEAD."
   [repository id branch]
   (let [config-map (config/load-config)
-        branch-ref (or branch (get-in config-map [:git :default-branch]))
-        head-id (.resolve repository (str branch-ref "^{commit}"))
+        branch-name (or branch (get-in config-map [:git :default-branch]))
+        head-id (.resolve repository (str branch-name "^{commit}"))
         [table-hint id-only] (path/extract-table-and-id id)
         encoded-id (path/encode-path (or id-only id))
         data-dir (get-in config-map [:storage :data-dir])
@@ -80,14 +80,14 @@
   "Get document history for a specific path"
   [^Repository repository ^String path branch]
   (let [config-map (config/load-config)
-        branch-ref (or branch (get-in config-map [:git :default-branch]))]
+        branch-name (or branch (get-in config-map [:git :default-branch]))]
 
     (when (and repository path)
       (let [git (Git/wrap repository)
             ^RevWalk rev-walk (RevWalk. repository)
             log-command (-> git
                             (.log)
-                            (.add (.resolve repository (str branch-ref "^{commit}")))
+                            (.add (.resolve repository (str branch-name "^{commit}")))
                             (.addPath path))]
 
         (try
@@ -137,18 +137,18 @@
           (finally
             (.close rev-walk)))))))
 
-(defn fetch-document-history
-  "Internal helper function to get the history of changes for a document.
-  Returns a sequence of maps containing commit info and document content at each version."
+(defn get-document-history
+  "Gets the history of changes for a document.
+   Returns a sequence of maps containing commit info and document content at each version."
   [repository id branch]
   (let [config-map (config/load-config)
-        branch-ref (or branch (get-in config-map [:git :default-branch]))
+        branch-name (or branch (get-in config-map [:git :default-branch]))
         ; Get data directory from config
         data-dir (get-in config-map [:storage :data-dir])
         ; Split logic - extract table if ID has table prefix (e.g., "user:1")
         [table-hint id-only] (path/extract-table-and-id id)
         ; Search for all possible paths containing the document ID
-        all-paths (find-all-document-paths repository id branch-ref)
+        all-paths (find-all-document-paths repository id branch-name)
         _ (log/log-info (str "Found " (count all-paths) " potential paths for document " id))]
 
     (if (seq all-paths)
@@ -156,7 +156,7 @@
       (let [all-results (atom [])]
         (doseq [path all-paths]
           (log/log-info (str "Getting history for path: " path))
-          (let [path-results (get-document-history-for-path repository path branch-ref)]
+          (let [path-results (get-document-history-for-path repository path branch-name)]
             (when (seq path-results)
               (swap! all-results concat path-results))))
 
@@ -183,7 +183,7 @@
             table-specific-path (when table-hint
                                   (path/get-file-path data-dir id-only table-hint))
             ; Generic document path (might find any table)
-            generic-path (document/get-document-path repository id branch-ref)
+            generic-path (document/get-document-path repository id branch-name)
             ; Use table-specific path if available, otherwise fallback to generic
             final-path (or table-specific-path generic-path)]
 
@@ -192,7 +192,7 @@
 
         (if (and repository final-path)
           ; Try with the specific path we found
-          (let [results (get-document-history-for-path repository final-path branch-ref)
+          (let [results (get-document-history-for-path repository final-path branch-name)
                 valid-results (filter #(and (:commit-id %)
                                             (:commit-time %)
                                             (:committer-name %)

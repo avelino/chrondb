@@ -73,8 +73,8 @@
 (defn- create-lucene-doc
   "Creates a Lucene Document from a Clojure map, using different analyzers."
   [doc _]
-  (let [ldoc (Document.)]
-    (.add ldoc (StringField. "id" (:id doc) Field$Store/YES))
+  (let [lucene-doc (Document.)]
+    (.add lucene-doc (StringField. "id" (:id doc) Field$Store/YES))
     (doseq [[k v] (dissoc doc :id)]
       (when v
         (let [field-name (name k)
@@ -82,18 +82,18 @@
               long-val (parse-long-safe field-value)
               double-val (when (nil? long-val)
                            (parse-double-safe field-value))]
-          (.add ldoc (TextField. field-name field-value Field$Store/YES))
+          (.add lucene-doc (TextField. field-name field-value Field$Store/YES))
 
           (cond
             long-val
             (let [long-arr (long-array [long-val])]
-              (.add ldoc (LongPoint. field-name long-arr))
-              (.add ldoc (NumericDocValuesField. field-name long-val)))
+              (.add lucene-doc (LongPoint. field-name long-arr))
+              (.add lucene-doc (NumericDocValuesField. field-name long-val)))
 
             double-val
             (let [double-arr (double-array [double-val])]
-              (.add ldoc (DoublePoint. field-name double-arr))
-              (.add ldoc (DoubleDocValuesField. field-name double-val))))
+              (.add lucene-doc (DoublePoint. field-name double-arr))
+              (.add lucene-doc (DoubleDocValuesField. field-name double-val))))
 
           (when (or (= field-name "name")
                     (= field-name "description")
@@ -101,8 +101,8 @@
                     (= field-name "text")
                     (= field-name "location")
                     (str/ends-with? field-name "_fts"))
-            (.add ldoc (TextField. (normalize-field field-name) field-value Field$Store/YES))))))
-    ldoc))
+            (.add lucene-doc (TextField. (normalize-field field-name) field-value Field$Store/YES))))))
+    lucene-doc))
 
 (defmulti ast->query (fn [_ clause] (:type clause)))
 

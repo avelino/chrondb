@@ -27,7 +27,7 @@
             [org.eclipse.jgit.treewalk TreeWalk]
             [org.eclipse.jgit.treewalk.filter PathFilter]))
 
-(defn is-document-path-match?
+(defn document-path-match?
   "Check if a path matches a document ID"
   [^String path id table]
   (let [^String encoded-id (path/encode-path id)
@@ -69,8 +69,8 @@
 
             (while (.next tree-walk)
               (let [path (.getPathString tree-walk)]
-                (when (or (is-document-path-match? path id-only table-hint)
-                          (is-document-path-match? path id nil))
+                (when (or (document-path-match? path id-only table-hint)
+                          (document-path-match? path id nil))
                   (log/log-info (str "Found possible document path: " path))
                   (swap! paths conj path))))
 
@@ -133,7 +133,7 @@
                 (loop [found-path nil]
                   (if (and (.next tree-walk) (nil? found-path))
                     (let [path (.getPathString tree-walk)]
-                      (if (is-document-path-match? path id-only table-hint)
+                      (if (document-path-match? path id-only table-hint)
                         (do
                           (log/log-info (str "✅ Found document at path: " path))
                           path)

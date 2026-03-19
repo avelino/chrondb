@@ -58,12 +58,12 @@
    Thread-safe via locking."
   [data-path index-path]
   (locking instance-lock
-    (let [key [(normalize-path data-path) (normalize-path index-path)]
-          existing (get @instance-registry key)]
+    (let [registry-key [(normalize-path data-path) (normalize-path index-path)]
+          existing (get @instance-registry registry-key)]
       (if existing
         ;; Existing instance: increment ref-count and return
         (do
-          (swap! instance-registry update-in [key :ref-count] inc)
+          (swap! instance-registry update-in [registry-key :ref-count] inc)
           {:storage (:storage existing)
            :index (:index existing)
            :reused true})
@@ -79,7 +79,7 @@
                 idx (lucene/create-lucene-index index-path)]
             (when (and storage idx)
               (lucene/ensure-index-populated idx storage nil {:async? false})
-              (swap! instance-registry assoc key
+              (swap! instance-registry assoc registry-key
                      {:storage storage :index idx :ref-count 1}))
             {:storage storage :index idx :reused false}))))))
 
@@ -88,14 +88,14 @@
    Thread-safe via locking."
   [data-path index-path]
   (locking instance-lock
-    (let [key [(normalize-path data-path) (normalize-path index-path)]
-          existing (get @instance-registry key)]
+    (let [registry-key [(normalize-path data-path) (normalize-path index-path)]
+          existing (get @instance-registry registry-key)]
       (when existing
         (let [new-count (dec (:ref-count existing))]
           (if (<= new-count 0)
             ;; Last reference: close resources and remove from registry
             (do
-              (swap! instance-registry dissoc key)
+              (swap! instance-registry dissoc registry-key)
               (when (:index existing)
                 (try (index/close (:index existing)) (catch Exception _ nil)))
               (when (:storage existing)
@@ -103,7 +103,7 @@
               true)
             ;; Still has references: just decrement count
             (do
-              (swap! instance-registry update-in [key :ref-count] dec)
+              (swap! instance-registry update-in [registry-key :ref-count] dec)
               false)))))))
 
 (defn lib-open
@@ -254,97 +254,147 @@
   [db-path]
   (lib-open db-path (derive-index-path db-path)))
 
+;; Lazy-load SQL engine functions once, not on every call.
+(defonce ^:private sql-fns
+  (delay
+    (require 'chrondb.api.sql.parser.statements
+             'chrondb.api.sql.execution.query)
+    {:parse        (ns-resolve 'chrondb.api.sql.parser.statements 'parse-sql-query)
+     :select       (ns-resolve 'chrondb.api.sql.execution.query 'handle-select)
+     :insert-case  (ns-resolve 'chrondb.api.sql.execution.query 'handle-insert-case)
+     :update-case  (ns-resolve 'chrondb.api.sql.execution.query 'handle-update-case)
+     :delete-case  (ns-resolve 'chrondb.api.sql.execution.query 'handle-delete-case)}))
+
+(defn- select-col-names
+  "Extracts column names from a SELECT result."
+  [docs columns]
+  (if (some #(= :all (:type %)) columns)
+    (->> docs
+         (mapcat keys)
+         (filter #(not= % :_table))
+         distinct
+         sort
+         (mapv name))
+    (->> columns
+         (filter #(= :column (:type %)))
+         (mapv :column))))
+
+(def ^:private ^:const max-sql-result-rows
+  "Safety limit for SELECT results to prevent OOM on large tables.
+   Users needing more should use LIMIT in their SQL."
+  10000)
+
+;; Null output stream — discards all bytes without buffering.
+;; Avoids memory waste from ByteArrayOutputStream in INSERT/UPDATE/DELETE
+;; where the protocol output is not needed.
+(def ^:private null-output-stream
+  (proxy [java.io.OutputStream] []
+    (write
+      ([_b])
+      ([_b _off _len]))
+    (flush [])
+    (close [])))
+
+(defn- execute-sql-dispatch
+  "Dispatches a parsed SQL query and returns a result map."
+  [storage index parsed branch]
+  (let [{:keys [select insert-case update-case delete-case]} @sql-fns
+        query-type (:type parsed)]
+    (case query-type
+      :select
+      (let [all-docs (select storage index parsed)
+            truncated? (> (count all-docs) max-sql-result-rows)
+            docs (if truncated?
+                   (take max-sql-result-rows all-docs)
+                   all-docs)
+            col-names (select-col-names docs (:columns parsed))]
+        (cond-> {:type "select"
+                 :columns col-names
+                 :rows (mapv (fn [doc]
+                               (mapv #(get doc (keyword %) "") col-names))
+                             docs)
+                 :count (count docs)}
+          truncated? (assoc :truncated true
+                            :total (count all-docs))))
+
+      :insert
+      (let [saved (insert-case storage index null-output-stream parsed)]
+        {:type "insert"
+         :affected (count (or saved []))})
+
+      :update
+      (let [saved (update-case storage index null-output-stream parsed)]
+        {:type "update"
+         :affected (count (or saved []))})
+
+      :delete
+      (let [;; Count matching documents before delete to report accurate affected count.
+            ;; The SQL delete handler writes results to a stream, so we can't rely on
+            ;; its return value. Instead, we resolve the target documents ourselves.
+            table-name (:table parsed)
+            where-cond (:where parsed)
+            pre-count (cond
+                        ;; WHERE id = 'value' — direct lookup
+                        (and (seq where-cond)
+                             (= (:field (first where-cond)) "id")
+                             (= (:op (first where-cond)) "="))
+                        (let [id-val (.replaceAll ^String (:value (first where-cond)) "['\"]" "")]
+                          (if (some? (storage/get-document storage id-val branch)) 1 0))
+
+                        ;; No WHERE or non-id WHERE — count from table
+                        (and table-name (seq where-cond))
+                        (let [docs (storage/get-documents-by-table storage table-name branch)]
+                          (count docs))
+
+                        :else 0)
+            _ (delete-case storage index null-output-stream parsed)]
+        {:type "delete"
+         :affected pre-count})
+
+      :show-tables
+      (let [docs (storage/get-documents-by-prefix storage "" branch)
+            table-names (->> docs
+                             (map (fn [doc]
+                                    (or (:_table doc)
+                                        (let [id (str (:id doc))]
+                                          (when (.contains id ":")
+                                            (first (.split id ":")))))))
+                             (filter some?)
+                             distinct
+                             sort
+                             vec)]
+        {:type "show-tables" :tables table-names})
+
+      :create-table
+      {:type "error"
+       :message "CREATE TABLE is not supported. ChronDB is schemaless — just INSERT data."}
+
+      :drop-table
+      {:type "error"
+       :message "DROP TABLE is not supported. Delete documents individually."}
+
+      ;; Default
+      {:type "error"
+       :message (str "Unsupported query type: " (name query-type))})))
+
 (defn lib-execute-sql
   "Executes a SQL query against the database.
    Returns a JSON string with the results:
    - SELECT: {\"type\":\"select\",\"columns\":[...],\"rows\":[...],\"count\":N}
    - INSERT/UPDATE/DELETE: {\"type\":\"...\",\"affected\":N}
-   - DDL: {\"type\":\"...\",\"result\":\"ok\"}
    - Error: {\"type\":\"error\",\"message\":\"...\"}
    Returns nil if handle is invalid."
   [handle sql branch]
   (try
     (when-let [{:keys [storage index]} (get @handle-registry handle)]
-      (let [statements-ns 'chrondb.api.sql.parser.statements
-            query-ns 'chrondb.api.sql.execution.query
-            _ (require statements-ns query-ns)
-            parse-fn (ns-resolve statements-ns 'parse-sql-query)
-            handle-select-fn (ns-resolve query-ns 'handle-select)
-            handle-insert-case-fn (ns-resolve query-ns 'handle-insert-case)
-            handle-update-case-fn (ns-resolve query-ns 'handle-update-case)
-            handle-delete-case-fn (ns-resolve query-ns 'handle-delete-case)
-            operators-ns 'chrondb.api.sql.execution.operators
-            _ (require operators-ns)
-            parsed (parse-fn sql)
-            query-type (:type parsed)]
-        (json/write-str
-         (case query-type
-           :select
-           (let [docs (handle-select-fn storage index parsed)
-                 columns (:columns parsed)
-                 col-names (if (some #(= :all (:type %)) columns)
-                             (->> docs
-                                  (mapcat keys)
-                                  (filter #(not= % :_table))
-                                  distinct
-                                  sort
-                                  (mapv name))
-                             (->> columns
-                                  (filter #(= :column (:type %)))
-                                  (mapv :column)))]
-             {:type "select"
-              :columns col-names
-              :rows (mapv (fn [doc]
-                            (mapv #(get doc (keyword %) "") col-names))
-                          docs)
-              :count (count docs)})
-
-           :insert
-           (let [dummy-out (java.io.ByteArrayOutputStream.)
-                 saved (handle-insert-case-fn storage index dummy-out parsed)]
-             {:type "insert"
-              :affected (count (or saved []))})
-
-           :update
-           (let [dummy-out (java.io.ByteArrayOutputStream.)
-                 saved (handle-update-case-fn storage index dummy-out parsed)]
-             {:type "update"
-              :affected (count (or saved []))})
-
-           :delete
-           (let [dummy-out (java.io.ByteArrayOutputStream.)
-                 ;; Check if document exists before attempting delete
-                 where-cond (:where parsed)
-                 id-val (when (and (seq where-cond)
-                                   (= (:field (first where-cond)) "id")
-                                   (= (:op (first where-cond)) "="))
-                          (.replaceAll ^String (:value (first where-cond)) "['\"]" ""))
-                 branch-name (or branch "main")
-                 exists? (when id-val
-                           (some? (storage/get-document storage id-val branch-name)))
-                 _ (handle-delete-case-fn storage index dummy-out parsed)]
-             {:type "delete"
-              :affected (if exists? 1 0)})
-
-           :create-table
-           {:type "create-table" :result "ok" :table (:table parsed)}
-
-           :drop-table
-           {:type "drop-table" :result "ok" :table (:table parsed)}
-
-           :show-tables
-           (let [tables (storage/get-documents-by-prefix storage "" branch)
-                 table-names (->> tables
-                                  (map :_table)
-                                  (filter some?)
-                                  distinct
-                                  sort
-                                  vec)]
-             {:type "show-tables" :tables table-names})
-
-           ;; Default
-           {:type "error"
-            :message (str "Unsupported query type: " (name query-type))}))))
+      (let [parsed ((:parse @sql-fns) sql)
+            ;; Inject branch into parsed query as :schema so SQL handlers
+            ;; route to the correct Git branch. Only override if user
+            ;; explicitly provided a branch and the SQL has no explicit schema.
+            parsed (if (and branch (nil? (:schema parsed)))
+                     (assoc parsed :schema branch)
+                     parsed)]
+        (json/write-str (execute-sql-dispatch storage index parsed branch))))
     (catch Throwable e
       (json/write-str {:type "error"
                        :message (.getMessage e)}))))
