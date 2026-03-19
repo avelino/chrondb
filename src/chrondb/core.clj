@@ -56,12 +56,15 @@
   (@server-dispatch-fn command args))
 
 (defn- looks-like-path?
-  "Checks if a string looks like a file/directory path."
+  "Checks if a string looks like a file/directory path.
+   Matches absolute paths, relative paths with dot prefix,
+   home-relative paths, and paths containing directory separators."
   [s]
   (or (.startsWith ^String s "/")
       (.startsWith ^String s "./")
       (.startsWith ^String s "../")
-      (.startsWith ^String s "~/")))
+      (.startsWith ^String s "~/")
+      (.contains ^String s java.io.File/separator)))
 
 (defn detect-mode
   [args]

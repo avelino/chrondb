@@ -160,53 +160,53 @@
     (= 404 (:status resp)) (exit! 1 (str "Not found: " (pretty-json (:body resp))))
     :else (exit! 1 (str "HTTP " (:status resp) ": " (pretty-json (:body resp))))))
 
-(defn- cfg-from-options [opts]
+(defn- config-from-options [opts]
   (select-keys opts [:host :port :scheme :base-url :token :timeout]))
 
-(defn run-init [cfg _ _]
-  (handle-response (http/init! cfg)))
+(defn run-init [config _ _]
+  (handle-response (http/init! config)))
 
-(defn run-info [cfg args opts]
-  (run-init cfg args opts))
+(defn run-info [config args opts]
+  (run-init config args opts))
 
-(defn run-get [cfg [id] opts]
-  (handle-response (http/get-document cfg id opts)))
+(defn run-get [config [id] opts]
+  (handle-response (http/get-document config id opts)))
 
-(defn run-put [cfg [id] opts]
+(defn run-put [config [id] opts]
   (let [{:keys [data file branch]} opts
         doc (cond
               data (read-json data)
               file (first (load-documents-from-file file))
               :else (throw (ex-info "Either --data or --file is required" {})))
         payload (assoc doc :id id)]
-    (handle-response (http/put-document cfg payload {:branch branch}))))
+    (handle-response (http/put-document config payload {:branch branch}))))
 
-(defn run-history [cfg [id] opts]
-  (handle-response (http/get-history cfg id opts)))
+(defn run-history [config [id] opts]
+  (handle-response (http/get-history config id opts)))
 
-(defn run-delete [cfg [id] opts]
-  (handle-response (http/delete-document cfg id opts)))
+(defn run-delete [config [id] opts]
+  (handle-response (http/delete-document config id opts)))
 
-(defn run-export [cfg _ opts]
-  (let [resp (http/export-documents cfg opts)]
+(defn run-export [config _ opts]
+  (let [resp (http/export-documents config opts)]
     (if-let [path (:output opts)]
       (do
         (spit path (pretty-json (:body resp)))
         (println "Export written to" path))
       (handle-response resp))))
 
-(defn run-import [cfg _ opts]
+(defn run-import [config _ opts]
   (let [docs (read-import-docs opts)]
     (if (seq docs)
-      (handle-response (http/import-documents cfg docs {:branch (:branch opts)}))
+      (handle-response (http/import-documents config docs {:branch (:branch opts)}))
       (exit! 1 "No documents provided for import"))))
 
-(defn run-verify [cfg _ _]
-  (handle-response (http/verify cfg)))
+(defn run-verify [config _ _]
+  (handle-response (http/verify config)))
 
-(defn run-tail-history [cfg [id] {:keys [interval since branch] :or {interval 2000}}]
+(defn run-tail-history [config [id] {:keys [interval since branch] :or {interval 2000}}]
   (loop [cursor since]
-    (let [resp (http/get-history cfg id {:branch branch :since cursor :limit 100})]
+    (let [resp (http/get-history config id {:branch branch :since cursor :limit 100})]
       (cond
         (= :error (:status resp)) (exit! 1 (str "Request error: " (:message resp)))
         (= 404 (:status resp)) (do
@@ -219,15 +219,15 @@
                 (Thread/sleep interval)
                 (recur (or new-cursor cursor)))))))
 
-(defn run-search [cfg _ opts]
+(defn run-search [config _ opts]
   (let [{:keys [q query branch limit offset sort after]} opts
-        resp (http/search-documents cfg {:q q
-                                         :query query
-                                         :branch branch
-                                         :limit limit
-                                         :offset offset
-                                         :sort sort
-                                         :after after})]
+        resp (http/search-documents config {:q q
+                                            :query query
+                                            :branch branch
+                                            :limit limit
+                                            :offset offset
+                                            :sort sort
+                                            :after after})]
     (handle-response resp)))
 
 (def handlers
@@ -243,9 +243,9 @@
    "tail-history" run-tail-history
    "search" run-search})
 
-(defn dispatch! [command cfg args opts]
+(defn dispatch! [command config args opts]
   (if-let [handler (handlers command)]
-    (handler cfg args opts)
+    (handler config args opts)
     (exit! 1 (str "Unknown command: " command))))
 
 (defn -main
@@ -267,5 +267,5 @@
           (let [required (:args (command-spec command))]
             (when (and required (< (count args) required))
               (exit! 1 (usage command))))
-          (let [cfg (merge (cfg-from-options options) (cfg-from-options (:options (command-spec command))))]
-            (dispatch! command cfg args options)))))))
+          (let [config (merge (config-from-options options) (config-from-options (:options (command-spec command))))]
+            (dispatch! command config args options)))))))

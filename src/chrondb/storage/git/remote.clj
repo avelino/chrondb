@@ -83,7 +83,7 @@
 
 ;; --- Remote Configuration ---
 
-(defn has-remote?
+(defn remote-configured?
   "Checks if the repository has a remote with the given name configured."
   [^Repository repo remote-name]
   (contains? (set (.getRemoteNames repo)) remote-name))
@@ -112,7 +112,7 @@
       ;; Initialize SSH for git@ URLs
       (when (.startsWith ^String remote-url "git@")
         (transport/initialize-ssh! (get-in config-map [:git :ssh] {})))
-      (when-not (has-remote? repo "origin")
+      (when-not (remote-configured? repo "origin")
         (add-remote git "origin" remote-url))
       true)))
 
@@ -152,7 +152,7 @@
 
       :else
       (let [repo (.getRepository git)]
-        (if-not (has-remote? repo "origin")
+        (if-not (remote-configured? repo "origin")
           (do (log/log-info "No remote 'origin' configured, skipping push")
               :skipped)
           (try
@@ -193,7 +193,7 @@
    - :failed   - Fetch failed"
   [^Git git config-map]
   (let [repo (.getRepository git)]
-    (if-not (has-remote? repo "origin")
+    (if-not (remote-configured? repo "origin")
       (do (log/log-info "No remote 'origin' configured, skipping fetch")
           :skipped)
       (try
@@ -240,7 +240,7 @@
    - :conflict - Cannot fast-forward (diverged histories)"
   [^Git git config-map]
   (let [repo (.getRepository git)]
-    (if-not (has-remote? repo "origin")
+    (if-not (remote-configured? repo "origin")
       (do (log/log-info "No remote 'origin' configured, skipping pull")
           :skipped)
       (let [fetch-result (fetch-from-remote git config-map)

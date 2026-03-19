@@ -97,7 +97,7 @@
     (protocol/get-document-history _ id nil))
 
   (get-document-history [_ id branch]
-    (history/fetch-document-history repository id branch))
+    (history/get-document-history repository id branch))
 
   (close [_]
     (when repository

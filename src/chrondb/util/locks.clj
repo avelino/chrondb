@@ -30,7 +30,7 @@
         age-ms (- (System/currentTimeMillis) last-modified)]
     (> age-ms stale-lock-timeout-ms)))
 
-(defn lock-is-held?
+(defn lock-held?
   "Tries to acquire an exclusive lock on the file.
    Returns true if the lock is currently held by another process.
    Returns false if we can acquire the lock (meaning it's orphaned)."
@@ -68,7 +68,7 @@
         check-held? (:check-held? opts true)]
     (or force?
         (stale-lock? lock-file)
-        (and check-held? (not (lock-is-held? lock-file))))))
+        (and check-held? (not (lock-held? lock-file))))))
 
 (defn clean-stale-locks
   "Removes stale lock files from the given directory.
@@ -142,7 +142,7 @@
         {:path (.getPath lock)
          :age-ms age-ms
          :stale? (> age-ms stale-lock-timeout-ms)
-         :held? (lock-is-held? lock)}))))
+         :held? (lock-held? lock)}))))
 
 (defn clean-all-chrondb-locks
   "Cleans all ChronDB-related locks (Git and Lucene) from given paths.

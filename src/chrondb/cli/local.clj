@@ -14,6 +14,15 @@
 (defn- pretty-json [data]
   (json/write-str data :indent true :escape-unicode false))
 
+(def ^:private sql-keywords
+  #{"SELECT" "INSERT" "UPDATE" "DELETE" "CREATE" "DROP" "SHOW" "DESCRIBE"})
+
+(defn- sql-statement?
+  "Returns true if the input string starts with a SQL keyword."
+  [input]
+  (let [first-word (-> input str/trim (str/split #"\s+" 2) first str/upper-case)]
+    (contains? sql-keywords first-word)))
+
 (defn- print-table-result
   "Prints SQL select results as a formatted table."
   [{:keys [columns rows] row-count :count}]
@@ -73,13 +82,18 @@
               (println "Not found")))
 
     "put" (let [[id json-str] args]
-            (if (and id json-str)
-              (if-let [result (lib/lib-put handle id json-str branch)]
-                (println (pretty-json (json/read-str result)))
-                (binding [*out* *err*]
-                  (println "ERROR: Failed to save document")))
+            (if-not (and id json-str)
               (binding [*out* *err*]
-                (println "Usage: put <id> <json>"))))
+                (println "Usage: put <id> <json>"))
+              (let [json-err (try (let [_ (json/read-str json-str)] nil)
+                                  (catch Exception e (.getMessage e)))]
+                (if json-err
+                  (binding [*out* *err*]
+                    (println (str "ERROR: Invalid JSON — " json-err)))
+                  (if-let [result (lib/lib-put handle id json-str branch)]
+                    (println (pretty-json (json/read-str result)))
+                    (binding [*out* *err*]
+                      (println "ERROR: Failed to save document")))))))
 
     "delete" (let [result (lib/lib-delete handle (first args) branch)]
                (case result
@@ -125,14 +139,7 @@
         (when-not (or (= trimmed ".quit") (= trimmed ".exit"))
           (when-not (str/blank? trimmed)
             (try
-              (if (or (str/starts-with? (str/upper-case trimmed) "SELECT")
-                      (str/starts-with? (str/upper-case trimmed) "INSERT")
-                      (str/starts-with? (str/upper-case trimmed) "UPDATE")
-                      (str/starts-with? (str/upper-case trimmed) "DELETE")
-                      (str/starts-with? (str/upper-case trimmed) "CREATE")
-                      (str/starts-with? (str/upper-case trimmed) "DROP")
-                      (str/starts-with? (str/upper-case trimmed) "SHOW")
-                      (str/starts-with? (str/upper-case trimmed) "DESCRIBE"))
+              (if (sql-statement? trimmed)
                 (execute-sql handle trimmed branch)
                 (let [parts (str/split trimmed #"\s+" 3)]
                   (execute-kv-command handle (first parts) (rest parts) branch)))
@@ -190,14 +197,7 @@
           (repl-loop handle branch)
           ;; Single command execution
           (let [input (str/join " " rest-args)]
-            (if (or (str/starts-with? (str/upper-case input) "SELECT")
-                    (str/starts-with? (str/upper-case input) "INSERT")
-                    (str/starts-with? (str/upper-case input) "UPDATE")
-                    (str/starts-with? (str/upper-case input) "DELETE")
-                    (str/starts-with? (str/upper-case input) "CREATE")
-                    (str/starts-with? (str/upper-case input) "DROP")
-                    (str/starts-with? (str/upper-case input) "SHOW")
-                    (str/starts-with? (str/upper-case input) "DESCRIBE"))
+            (if (sql-statement? input)
               (execute-sql handle input branch)
               (let [parts (str/split input #"\s+" 3)]
                 (execute-kv-command handle (first parts) (rest parts) branch)))))
