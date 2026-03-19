@@ -17,6 +17,7 @@
 
 (def ^:private cli-ns "chrondb.cli.core")
 (def ^:private server-ns "chrondb.cli.server")
+(def ^:private local-ns "chrondb.cli.local")
 
 (defn- requiring-var
   [namespace name]
@@ -30,6 +31,7 @@
 (def ^:private server-usage-fn (delay @(requiring-var server-ns "usage")))
 (def ^:private server-parse-fn (delay @(requiring-var server-ns "parse-command")))
 (def ^:private server-dispatch-fn (delay @(requiring-var server-ns "dispatch!")))
+(def ^:private local-main-fn (delay @(requiring-var local-ns "-main")))
 
 (defn- cli-command-set []
   (-> @cli-command-spec keys set))
@@ -53,6 +55,14 @@
 (defn- dispatch-server! [command args]
   (@server-dispatch-fn command args))
 
+(defn- looks-like-path?
+  "Checks if a string looks like a file/directory path."
+  [s]
+  (or (.startsWith ^String s "/")
+      (.startsWith ^String s "./")
+      (.startsWith ^String s "../")
+      (.startsWith ^String s "~/")))
+
 (defn detect-mode
   [args]
   (let [[cmd & _] args
@@ -60,6 +70,7 @@
         server-commands (server-command-set)]
     (cond
       (nil? cmd) :server
+      (looks-like-path? cmd) :local
       (cli-commands cmd) :cli
       (server-commands cmd) :server
       (contains? #{"--help" "-h"} cmd) :help
@@ -74,6 +85,7 @@
             (println)
             (println (cli-usage)))
     :cli (apply cli-main args)
+    :local (apply (@local-main-fn) args)
     (let [{:keys [command args value]} (parse-server-command args)]
       (if (= command :unknown)
         (do

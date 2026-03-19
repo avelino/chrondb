@@ -15,6 +15,9 @@ interface ChronDB {
     [Throws=ChronDBError, Name=open]
     constructor(string data_path, string index_path);
 
+    [Throws=ChronDBError, Name=open_path]
+    constructor(string db_path);
+
     [Throws=ChronDBError, Name=open_with_idle_timeout]
     constructor(string data_path, string index_path, u64 idle_timeout_secs);
 
@@ -38,6 +41,9 @@ interface ChronDB {
 
     [Throws=ChronDBError]
     string query(string query_json, string? branch);
+
+    [Throws=ChronDBError]
+    string execute_sql(string sql, string? branch);
 
     string? last_error();
 };

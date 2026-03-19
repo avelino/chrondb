@@ -22,6 +22,7 @@ public final class ChronDBLib {
 
     private static volatile boolean initialized = false;
     private static IFn libOpen;
+    private static IFn libOpenPath;
     private static IFn libClose;
     private static IFn libPut;
     private static IFn libGet;
@@ -30,6 +31,7 @@ public final class ChronDBLib {
     private static IFn libListByTable;
     private static IFn libHistory;
     private static IFn libQuery;
+    private static IFn libExecuteSql;
 
     private static synchronized void ensureInitialized() {
         if (!initialized) {
@@ -37,6 +39,7 @@ public final class ChronDBLib {
             require.invoke(Clojure.read("chrondb.lib.core"));
 
             libOpen = Clojure.var("chrondb.lib.core", "lib-open");
+            libOpenPath = Clojure.var("chrondb.lib.core", "lib-open-path");
             libClose = Clojure.var("chrondb.lib.core", "lib-close");
             libPut = Clojure.var("chrondb.lib.core", "lib-put");
             libGet = Clojure.var("chrondb.lib.core", "lib-get");
@@ -45,6 +48,7 @@ public final class ChronDBLib {
             libListByTable = Clojure.var("chrondb.lib.core", "lib-list-by-table");
             libHistory = Clojure.var("chrondb.lib.core", "lib-history");
             libQuery = Clojure.var("chrondb.lib.core", "lib-query");
+            libExecuteSql = Clojure.var("chrondb.lib.core", "lib-execute-sql");
 
             initialized = true;
         }
@@ -76,13 +80,36 @@ public final class ChronDBLib {
             if (result instanceof Number) {
                 int handle = ((Number) result).intValue();
                 if (handle < 0) {
-                    // Clojure returned -1 (error) - provide a meaningful error message
                     lastError = "Failed to open database at " + dp + " (index: " + ip + "). " +
                         "Check that the paths are valid and writable.";
                 }
                 return handle;
             }
             lastError = ("open returned non-numeric result: " +
+                (result == null ? "null" : result.getClass().getName()));
+            return -1;
+        } catch (Exception e) {
+            String msg = e.getMessage();
+            lastError = (e.getClass().getName() + ": " + (msg != null ? msg : "no message"));
+            return -1;
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_open_path")
+    public static int openPath(IsolateThread thread, CCharPointer dbPath) {
+        try {
+            ensureInitialized();
+            String path = toJavaString(dbPath);
+            Object result = libOpenPath.invoke(path);
+            if (result instanceof Number) {
+                int handle = ((Number) result).intValue();
+                if (handle < 0) {
+                    lastError = "Failed to open database at " + path + ". " +
+                        "Check that the path is valid and writable.";
+                }
+                return handle;
+            }
+            lastError = ("open_path returned non-numeric result: " +
                 (result == null ? "null" : result.getClass().getName()));
             return -1;
         } catch (Exception e) {
@@ -232,6 +259,27 @@ public final class ChronDBLib {
             if (result instanceof String) {
                 return toCString((String) result);
             }
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    // --- SQL ---
+
+    @CEntryPoint(name = "chrondb_execute_sql")
+    public static CCharPointer executeSql(IsolateThread thread, int handle,
+                                          CCharPointer sql, CCharPointer branch) {
+        try {
+            ensureInitialized();
+            String sqlStr = toJavaString(sql);
+            String branchStr = toJavaString(branch);
+            Object result = libExecuteSql.invoke(handle, sqlStr, branchStr);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("execute_sql returned null");
             return WordFactory.nullPointer();
         } catch (Exception e) {
             lastError = (e.getMessage());

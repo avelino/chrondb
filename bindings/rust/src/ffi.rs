@@ -93,6 +93,18 @@ type ChrondbQueryFn = unsafe extern "C" fn(
     branch: *const c_char,
 ) -> *mut c_char;
 
+type ChrondbExecuteSqlFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    sql: *const c_char,
+    branch: *const c_char,
+) -> *mut c_char;
+
+type ChrondbOpenPathFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    db_path: *const c_char,
+) -> c_int;
+
 type ChrondbFreeStringFn =
     unsafe extern "C" fn(thread: *mut graal_isolatethread_t, ptr: *mut c_char);
 
@@ -113,6 +125,8 @@ pub struct ChronDBLib {
     pub chrondb_list_by_table: ChrondbListByTableFn,
     pub chrondb_history: ChrondbHistoryFn,
     pub chrondb_query: ChrondbQueryFn,
+    pub chrondb_execute_sql: ChrondbExecuteSqlFn,
+    pub chrondb_open_path: ChrondbOpenPathFn,
     pub chrondb_free_string: ChrondbFreeStringFn,
     pub chrondb_last_error: ChrondbLastErrorFn,
 }
@@ -223,6 +237,14 @@ impl ChronDBLib {
                 .get::<ChrondbQueryFn>(b"chrondb_query")
                 .map_err(|e| format!("Symbol chrondb_query not found: {}", e))?;
 
+            let chrondb_execute_sql: ChrondbExecuteSqlFn = *lib
+                .get::<ChrondbExecuteSqlFn>(b"chrondb_execute_sql")
+                .map_err(|e| format!("Symbol chrondb_execute_sql not found: {}", e))?;
+
+            let chrondb_open_path: ChrondbOpenPathFn = *lib
+                .get::<ChrondbOpenPathFn>(b"chrondb_open_path")
+                .map_err(|e| format!("Symbol chrondb_open_path not found: {}", e))?;
+
             let chrondb_free_string: ChrondbFreeStringFn = *lib
                 .get::<ChrondbFreeStringFn>(b"chrondb_free_string")
                 .map_err(|e| format!("Symbol chrondb_free_string not found: {}", e))?;
@@ -244,6 +266,8 @@ impl ChronDBLib {
                 chrondb_list_by_table,
                 chrondb_history,
                 chrondb_query,
+                chrondb_execute_sql,
+                chrondb_open_path,
                 chrondb_free_string,
                 chrondb_last_error,
             })

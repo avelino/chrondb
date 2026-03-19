@@ -14,7 +14,16 @@ pub struct ChronDB {
 
 #[napi]
 impl ChronDB {
+    /// Opens a ChronDB database with a single directory path.
+    /// The index is stored automatically inside the database directory.
+    #[napi(factory)]
+    pub fn open_path(db_path: String) -> Result<Self> {
+        let inner = ChronDBInner::open_path(&db_path).map_err(to_napi_error)?;
+        Ok(Self { inner })
+    }
+
     /// Opens a ChronDB database at the given paths.
+    /// Deprecated: Use `openPath` instead.
     #[napi(factory)]
     pub fn open(data_path: String, index_path: String) -> Result<Self> {
         let inner = ChronDBInner::open(&data_path, &index_path).map_err(to_napi_error)?;
@@ -90,6 +99,16 @@ impl ChronDB {
         let query: serde_json::Value = serde_json::from_str(&query_json)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let result = self.inner.query(&query, branch.as_deref()).map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    /// Execute a SQL query. Returns JSON results string.
+    #[napi]
+    pub fn execute_sql(&self, sql: String, branch: Option<String>) -> Result<String> {
+        let result = self
+            .inner
+            .execute_sql(&sql, branch.as_deref())
+            .map_err(to_napi_error)?;
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 

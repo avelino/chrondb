@@ -54,7 +54,8 @@ All bindings expose the same core API:
 
 | Operation | Description |
 |-----------|-------------|
-| `open(data_path, index_path)` | Open a database connection |
+| `open_path(db_path)` | Open a database connection (preferred) |
+| `open(data_path, index_path)` | Open with separate paths *(deprecated)* |
 | `open_with_idle_timeout(data_path, index_path, secs)` | Open with idle timeout |
 | `put(id, doc, branch?)` | Save a document |
 | `get(id, branch?)` | Get a document by ID |
@@ -63,6 +64,7 @@ All bindings expose the same core API:
 | `list_by_table(table, branch?)` | List documents by table |
 | `history(id, branch?)` | Get change history |
 | `query(query, branch?)` | Execute a Lucene query |
+| `execute_sql(sql, branch?)` | Execute a SQL query directly (no server needed) |
 
 Each language wrapper adds idiomatic conveniences (context managers in Python, keyword arguments in Ruby, TypeScript types in Node.js) while the core behavior is identical.
 

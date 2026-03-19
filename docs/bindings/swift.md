@@ -20,7 +20,8 @@ Add via Swift Package Manager:
 ```swift
 import ChronDB
 
-let db = try ChronDB.open(dataPath: "/tmp/data", indexPath: "/tmp/index")
+// Single path (preferred)
+let db = try ChronDB.openPath(dbPath: "./mydb")
 
 // Save a document
 try db.put(id: "user:1", jsonDoc: #"{"name": "Alice", "age": 30}"#, branch: nil)
@@ -30,11 +31,17 @@ let doc = try db.get(id: "user:1", branch: nil)
 print(doc) // {"name":"Alice","age":30}
 ```
 
+> **Legacy API (deprecated):** `ChronDB.open(dataPath:indexPath:)` still works but is deprecated. Use `openPath` instead.
+
 ## API Reference
 
-### `ChronDB.open(dataPath:indexPath:) throws -> ChronDB`
+### `ChronDB.openPath(dbPath:) throws -> ChronDB`
 
-Opens a database connection.
+Opens a database connection using a single directory path. Data and index are stored in subdirectories automatically.
+
+### `ChronDB.open(dataPath:indexPath:) throws -> ChronDB` *(deprecated)*
+
+> **Deprecated.** Use `openPath` instead. This method still works but will be removed in a future release.
 
 ### `ChronDB.openWithIdleTimeout(dataPath:indexPath:idleTimeoutSecs:) throws -> ChronDB`
 
@@ -51,6 +58,7 @@ Opens a database with idle timeout.
 | `listByTable(table:branch:)` | List by table |
 | `history(id:branch:)` | Get change history |
 | `query(queryJson:branch:)` | Execute a Lucene query |
+| `executeSql(sql:branch:)` | Execute a SQL query directly |
 
 ## Error Handling
 
@@ -58,7 +66,7 @@ Opens a database with idle timeout.
 import ChronDB
 
 do {
-    let db = try ChronDB.open(dataPath: "/tmp/data", indexPath: "/tmp/index")
+    let db = try ChronDB.openPath(dbPath: "./mydb")
     let doc = try db.get(id: "user:999", branch: nil)
 } catch ChronDBError.NotFound {
     print("Document does not exist")
@@ -67,7 +75,23 @@ do {
 }
 ```
 
-## Example with Idle Timeout
+## Examples
+
+### SQL Queries
+
+Execute SQL queries directly without needing a running server:
+
+```swift
+let db = try ChronDB.openPath(dbPath: "./mydb")
+
+try db.put(id: "user:1", jsonDoc: #"{"name": "Alice", "age": 30}"#, branch: nil)
+try db.put(id: "user:2", jsonDoc: #"{"name": "Bob", "age": 25}"#, branch: nil)
+
+let result = try db.executeSql(sql: "SELECT * FROM user", branch: nil)
+print(result) // {"type":"select","columns":[...],"rows":[...],"count":2}
+```
+
+### Idle Timeout
 
 ```swift
 // Isolate suspends after 2 minutes of inactivity

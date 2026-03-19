@@ -55,6 +55,12 @@ impl ChronDB {
         Ok(Self { inner })
     }
 
+    fn open_path(db_path: String) -> Result<Self, ChronDBError> {
+        let index_path = format!("{}/.chrondb-index", db_path);
+        let inner = ChronDBInner::open(&db_path, &index_path)?;
+        Ok(Self { inner })
+    }
+
     fn open_with_idle_timeout(
         data_path: String,
         index_path: String,
@@ -132,6 +138,11 @@ impl ChronDB {
         serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
             msg: e.to_string(),
         })
+    }
+
+    fn execute_sql(&self, sql: String, branch: Option<String>) -> Result<String, ChronDBError> {
+        let result = self.inner.execute_sql(&sql, branch.as_deref())?;
+        Ok(result)
     }
 
     fn last_error(&self) -> Option<String> {

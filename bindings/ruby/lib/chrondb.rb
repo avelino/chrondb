@@ -9,25 +9,37 @@ module ChronDB
 
   # A connection to a ChronDB database instance.
   #
-  # @example Basic usage
-  #   db = ChronDB::Client.new("/tmp/data", "/tmp/index")
+  # @example Single-path usage (preferred)
+  #   db = ChronDB::Client.new("/tmp/mydb")
   #   db.put("user:1", { name: "Alice" })
   #   doc = db.get("user:1")
   #
   # @example With idle timeout (long-running services)
-  #   db = ChronDB::Client.new("/tmp/data", "/tmp/index", idle_timeout: 120)
+  #   db = ChronDB::Client.new("/tmp/mydb", idle_timeout: 120)
   #
   class Client
     # Open a ChronDB database.
     #
-    # @param data_path [String] Path for the Git repository (data storage)
-    # @param index_path [String] Path for the Lucene index
+    # @param db_path [String] Path for the database directory
+    # @param index_path [String, nil] Deprecated. Separate index path.
     # @param idle_timeout [Integer, nil] Seconds of inactivity before suspending
-    def initialize(data_path, index_path, idle_timeout: nil)
-      @inner = if idle_timeout
-                 Chrondb::ChronDb.open_with_idle_timeout(data_path, index_path, idle_timeout)
+    def initialize(db_path, index_path = nil, idle_timeout: nil)
+      @inner = if index_path
+                 warn "[DEPRECATION] Passing separate data_path and index_path is deprecated. " \
+                      "Use ChronDB::Client.new(db_path) instead — the index is managed automatically.",
+                      uplevel: 1
+                 if idle_timeout
+                   Chrondb::ChronDb.open_with_idle_timeout(db_path, index_path, idle_timeout)
+                 else
+                   Chrondb::ChronDb.open(db_path, index_path)
+                 end
                else
-                 Chrondb::ChronDb.open(data_path, index_path)
+                 if idle_timeout
+                   idx = "#{db_path}/.chrondb-index"
+                   Chrondb::ChronDb.open_with_idle_timeout(db_path, idx, idle_timeout)
+                 else
+                   Chrondb::ChronDb.open_path(db_path)
+                 end
                end
     rescue Chrondb::ChronDbError => e
       raise Error, e.message
@@ -121,6 +133,18 @@ module ChronDB
     # @return [Hash]
     def query(query, branch: nil)
       result = @inner.query(JSON.generate(query), branch)
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
+
+    # Execute a SQL query against the database.
+    #
+    # @param sql [String] SQL statement
+    # @param branch [String, nil] Branch name
+    # @return [Hash] Results depending on query type
+    def execute(sql, branch: nil)
+      result = @inner.execute_sql(sql, branch)
       JSON.parse(result)
     rescue Chrondb::ChronDbError => e
       raise Error, e.message

@@ -94,6 +94,11 @@ enum FfiCommand {
         branch: Option<String>,
         reply: Sender<Result<serde_json::Value>>,
     },
+    ExecuteSql {
+        sql: String,
+        branch: Option<String>,
+        reply: Sender<Result<serde_json::Value>>,
+    },
     LastError {
         reply: Sender<Option<String>>,
     },
@@ -306,6 +311,26 @@ impl FfiWorkerState {
         self.parse_string_result(result)
     }
 
+    fn handle_execute_sql(&self, sql: &str, branch: Option<&str>) -> Result<serde_json::Value> {
+        let c_sql =
+            CString::new(sql).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_branch = Self::optional_cstring(branch)?;
+
+        let result = unsafe {
+            (self.lib.chrondb_execute_sql)(
+                self.thread,
+                self.handle,
+                c_sql.as_ptr() as *mut c_char,
+                Self::ptr_or_null(&c_branch),
+            )
+        };
+
+        if result.is_null() {
+            return Err(self.last_error_or("execute_sql failed"));
+        }
+        self.parse_string_result(result)
+    }
+
     fn close(&mut self) {
         if self.handle >= 0 {
             unsafe {
@@ -364,7 +389,22 @@ unsafe impl Send for ChronDB {}
 unsafe impl Sync for ChronDB {}
 
 impl ChronDB {
+    /// Opens a ChronDB database with a single directory path.
+    ///
+    /// The index is stored automatically inside the database directory
+    /// as a `.chrondb-index` subdirectory.
+    ///
+    /// # Arguments
+    /// * `db_path` - Path for the database directory
+    pub fn open_path(db_path: &str) -> Result<Self> {
+        let index_path = format!("{}/.chrondb-index", db_path);
+        Self::open(db_path, &index_path)
+    }
+
     /// Opens a ChronDB database at the given paths.
+    ///
+    /// **Deprecated**: Use [`open_path`](Self::open_path) instead, which takes
+    /// a single directory path and manages the index automatically.
     ///
     /// If the native library is not installed, this function will automatically
     /// download and install it to `~/.chrondb/lib/`.
@@ -613,6 +653,14 @@ impl ChronDB {
                 let result = state.handle_query(&query, branch.as_deref());
                 let _ = reply.send(result);
             }
+            FfiCommand::ExecuteSql {
+                sql,
+                branch,
+                reply,
+            } => {
+                let result = state.handle_execute_sql(&sql, branch.as_deref());
+                let _ = reply.send(result);
+            }
             FfiCommand::LastError { reply } => {
                 let _ = reply.send(state.get_last_error());
             }
@@ -713,6 +761,7 @@ impl ChronDB {
             FfiCommand::ListByTable { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::History { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::Query { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::ExecuteSql { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::LastError { reply, .. } => { let _ = reply.send(None); }
             FfiCommand::Shutdown => {}
         }
@@ -854,6 +903,29 @@ impl ChronDB {
             .sender
             .send(FfiCommand::Query {
                 query: query_str,
+                branch: branch.map(|s| s.to_string()),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Executes a SQL query against the database.
+    ///
+    /// Returns the result as a JSON value with structure depending on query type:
+    /// - SELECT: `{"type":"select","columns":[...],"rows":[...],"count":N}`
+    /// - INSERT/UPDATE/DELETE: `{"type":"...","affected":N}`
+    /// - Error: `{"type":"error","message":"..."}`
+    pub fn execute_sql(&self, sql: &str, branch: Option<&str>) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::ExecuteSql {
+                sql: sql.to_string(),
                 branch: branch.map(|s| s.to_string()),
                 reply: reply_tx,
             })

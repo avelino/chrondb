@@ -95,10 +95,10 @@
   (when-let [result (validate-if-enabled repository document branch)]
     (when (and (not (:valid? result)) (= :strict (:mode result)))
       (throw (errors/validation-exception
-               (:namespace result)
-               (:id document)
-               (:errors result)
-               :strict)))
+              (:namespace result)
+              (:id document)
+              (:errors result)
+              :strict)))
     (when (and (not (:valid? result)) (= :warning (:mode result)))
       (log/log-warn (str "Document validation warning for " (:namespace result)
                          "/" (:id document) ": "

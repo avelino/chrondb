@@ -17,6 +17,8 @@
             [clojure.java.io :as io])
   (:import [java.util.concurrent.atomic AtomicInteger]))
 
+(def ^:private default-index-subdir ".chrondb-index")
+
 (defonce ^:private ^AtomicInteger handle-counter (AtomicInteger. 0))
 (defonce ^:private handle-registry (atom {}))
 
@@ -238,3 +240,102 @@
                          :offset (:offset result)})))
     (catch Throwable _e
       nil)))
+
+(defn- derive-index-path
+  "Derives the index path from a database directory path.
+   The index is stored as a subdirectory inside the database directory."
+  [db-path]
+  (str (io/file db-path default-index-subdir)))
+
+(defn lib-open-path
+  "Opens a ChronDB instance with a single database directory path.
+   The index is stored automatically inside the database directory.
+   Returns a handle (>= 0) on success, or -1 on error."
+  [db-path]
+  (lib-open db-path (derive-index-path db-path)))
+
+(defn lib-execute-sql
+  "Executes a SQL query against the database.
+   Returns a JSON string with the results:
+   - SELECT: {\"type\":\"select\",\"columns\":[...],\"rows\":[...],\"count\":N}
+   - INSERT/UPDATE/DELETE: {\"type\":\"...\",\"affected\":N}
+   - DDL: {\"type\":\"...\",\"result\":\"ok\"}
+   - Error: {\"type\":\"error\",\"message\":\"...\"}
+   Returns nil if handle is invalid."
+  [handle sql branch]
+  (try
+    (when-let [{:keys [storage index]} (get @handle-registry handle)]
+      (let [statements-ns 'chrondb.api.sql.parser.statements
+            query-ns 'chrondb.api.sql.execution.query
+            _ (require statements-ns query-ns)
+            parse-fn (ns-resolve statements-ns 'parse-sql-query)
+            handle-select-fn (ns-resolve query-ns 'handle-select)
+            handle-insert-case-fn (ns-resolve query-ns 'handle-insert-case)
+            handle-update-case-fn (ns-resolve query-ns 'handle-update-case)
+            handle-delete-case-fn (ns-resolve query-ns 'handle-delete-case)
+            operators-ns 'chrondb.api.sql.execution.operators
+            _ (require operators-ns)
+            parsed (parse-fn sql)
+            query-type (:type parsed)]
+        (json/write-str
+         (case query-type
+           :select
+           (let [docs (handle-select-fn storage index parsed)
+                 columns (:columns parsed)
+                 col-names (if (some #(= :all (:type %)) columns)
+                             (->> docs
+                                  (mapcat keys)
+                                  (filter #(not= % :_table))
+                                  distinct
+                                  sort
+                                  (mapv name))
+                             (->> columns
+                                  (filter #(= :column (:type %)))
+                                  (mapv :column)))]
+             {:type "select"
+              :columns col-names
+              :rows (mapv (fn [doc]
+                            (mapv #(get doc (keyword %) "") col-names))
+                          docs)
+              :count (count docs)})
+
+           :insert
+           (let [dummy-out (java.io.ByteArrayOutputStream.)
+                 saved (handle-insert-case-fn storage index dummy-out parsed)]
+             {:type "insert"
+              :affected (count (or saved []))})
+
+           :update
+           (let [dummy-out (java.io.ByteArrayOutputStream.)
+                 saved (handle-update-case-fn storage index dummy-out parsed)]
+             {:type "update"
+              :affected (count (or saved []))})
+
+           :delete
+           (let [dummy-out (java.io.ByteArrayOutputStream.)
+                 _ (handle-delete-case-fn storage index dummy-out parsed)]
+             {:type "delete"
+              :affected 1})
+
+           :create-table
+           {:type "create-table" :result "ok" :table (:table parsed)}
+
+           :drop-table
+           {:type "drop-table" :result "ok" :table (:table parsed)}
+
+           :show-tables
+           (let [tables (storage/get-documents-by-prefix storage "" branch)
+                 table-names (->> tables
+                                  (map :_table)
+                                  (filter some?)
+                                  distinct
+                                  sort
+                                  vec)]
+             {:type "show-tables" :tables table-names})
+
+           ;; Default
+           {:type "error"
+            :message (str "Unsupported query type: " (name query-type))}))))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))

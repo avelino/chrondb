@@ -155,11 +155,11 @@
        (let [^DirCache index (create-temporary-index git head-id path content)
              index-tree-id (.writeTree index object-inserter)
              ^CommitBuilder commit (doto (CommitBuilder.)
-                                    (.setAuthor author)
-                                    (.setCommitter author)
-                                    (.setEncoding Constants/CHARACTER_ENCODING)
-                                    (.setMessage ^String message)
-                                    (.setTreeId index-tree-id))]
+                                     (.setAuthor author)
+                                     (.setCommitter author)
+                                     (.setEncoding Constants/CHARACTER_ENCODING)
+                                     (.setMessage ^String message)
+                                     (.setTreeId index-tree-id))]
 
          (when head-id
            (.setParentId commit head-id))

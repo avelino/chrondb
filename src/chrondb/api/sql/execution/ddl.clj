@@ -135,7 +135,7 @@
 
       (doseq [table tables]
         (messages/send-data-row out [(:name table)
-                                      (if (:has_schema table) "YES" "NO")]))
+                                     (if (:has_schema table) "YES" "NO")]))
 
       (messages/send-command-complete out "SELECT" (count tables)))
 
@@ -280,7 +280,7 @@
 
         (messages/send-row-description out columns)
         (messages/send-data-row out [(if (:success result) "true" "false")
-                                      (:message result)])
+                                     (:message result)])
         (messages/send-command-complete out "SELECT" 1))
 
       (catch Exception e
@@ -311,8 +311,8 @@
 
         (messages/send-row-description out columns)
         (messages/send-data-row out [(if (:success result) "true" "false")
-                                      (:message result)
-                                      (or (:branch result) "")])
+                                     (:message result)
+                                     (or (:branch result) "")])
         (messages/send-command-complete out "SELECT" 1))
 
       (catch Exception e
@@ -339,7 +339,7 @@
 
         (messages/send-row-description out columns)
         (messages/send-data-row out [(if (:success result) "true" "false")
-                                      (:message result)])
+                                     (:message result)])
         (messages/send-command-complete out "SELECT" 1))
 
       (catch Exception e
@@ -473,11 +473,11 @@
       (if result
         (do
           (messages/send-data-row out [(:namespace result)
-                                        (str (:version result))
-                                        (:mode result)
-                                        (write-json (:schema result))
-                                        (str (:created_at result))
-                                        (or (:created_by result) "")])
+                                       (str (:version result))
+                                       (:mode result)
+                                       (write-json (:schema result))
+                                       (str (:created_at result))
+                                       (or (:created_by result) "")])
           (messages/send-command-complete out "SELECT" 1))
         (messages/send-command-complete out "SELECT" 0)))
 
@@ -514,9 +514,9 @@
 
       (doseq [vs result]
         (messages/send-data-row out [(:namespace vs)
-                                      (str (:version vs))
-                                      (:mode vs)
-                                      (str (:created_at vs))]))
+                                     (str (:version vs))
+                                     (:mode vs)
+                                     (str (:created_at vs))]))
 
       (messages/send-command-complete out "SELECT" (count result)))
 

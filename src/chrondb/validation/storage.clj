@@ -270,7 +270,7 @@
         (mapv (fn [commit]
                 {:commit-id (.getName commit)
                  :timestamp (str (java.time.Instant/ofEpochSecond
-                                   (.getCommitTime commit)))
+                                  (.getCommitTime commit)))
                  :committer (.getName (.getCommitterIdent commit))
                  :message (.getShortMessage commit)})
               commits))
