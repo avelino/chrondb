@@ -313,9 +313,18 @@
 
            :delete
            (let [dummy-out (java.io.ByteArrayOutputStream.)
+                 ;; Check if document exists before attempting delete
+                 where-cond (:where parsed)
+                 id-val (when (and (seq where-cond)
+                                   (= (:field (first where-cond)) "id")
+                                   (= (:op (first where-cond)) "="))
+                          (.replaceAll ^String (:value (first where-cond)) "['\"]" ""))
+                 branch-name (or branch "main")
+                 exists? (when id-val
+                           (some? (storage/get-document storage id-val branch-name)))
                  _ (handle-delete-case-fn storage index dummy-out parsed)]
              {:type "delete"
-              :affected 1})
+              :affected (if exists? 1 0)})
 
            :create-table
            {:type "create-table" :result "ok" :table (:table parsed)}
