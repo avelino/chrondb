@@ -142,7 +142,7 @@ impl ChronDB {
 
     fn execute_sql(&self, sql: String, branch: Option<String>) -> Result<String, ChronDBError> {
         let result = self.inner.execute_sql(&sql, branch.as_deref())?;
-        Ok(result)
+        Ok(result.to_string())
     }
 
     fn last_error(&self) -> Option<String> {

@@ -16,7 +16,7 @@
 
 (defn- print-table-result
   "Prints SQL select results as a formatted table."
-  [{:keys [columns rows count]}]
+  [{:keys [columns rows] row-count :count}]
   (when (and (seq columns) (seq rows))
     (let [col-widths (mapv (fn [i]
                              (apply max
@@ -40,7 +40,7 @@
       (doseq [row rows]
         (println (fmt-row row)))
       (println separator)
-      (println (str count " row(s)")))))
+      (println (str row-count " row(s)")))))
 
 (defn- execute-sql
   "Executes a SQL statement and prints the result."
