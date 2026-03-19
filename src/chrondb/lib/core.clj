@@ -328,28 +328,32 @@
          :affected (count (or saved []))})
 
       :delete
-      (let [;; Count matching documents before delete to report accurate affected count.
-            ;; The SQL delete handler writes results to a stream, so we can't rely on
-            ;; its return value. Instead, we resolve the target documents ourselves.
+      (let [;; The SQL delete handler writes errors to the output stream instead of
+            ;; throwing or returning a status. We verify the actual outcome by checking
+            ;; document existence before and after the operation.
             table-name (:table parsed)
             where-cond (:where parsed)
-            pre-count (cond
-                        ;; WHERE id = 'value' — direct lookup
-                        (and (seq where-cond)
-                             (= (:field (first where-cond)) "id")
-                             (= (:op (first where-cond)) "="))
-                        (let [id-val (.replaceAll ^String (:value (first where-cond)) "['\"]" "")]
-                          (if (some? (storage/get-document storage id-val branch)) 1 0))
-
-                        ;; No WHERE or non-id WHERE — count from table
-                        (and table-name (seq where-cond))
-                        (let [docs (storage/get-documents-by-table storage table-name branch)]
-                          (count docs))
-
-                        :else 0)
-            _ (delete-case storage index null-output-stream parsed)]
-        {:type "delete"
-         :affected pre-count})
+            id-val (when (and (seq where-cond)
+                              (= (:field (first where-cond)) "id")
+                              (= (:op (first where-cond)) "="))
+                     (.replaceAll ^String (:value (first where-cond)) "['\"]" ""))
+            pre-exists? (when id-val
+                          (some? (storage/get-document storage id-val branch)))
+            _ (delete-case storage index null-output-stream parsed)
+            post-exists? (when id-val
+                           (some? (storage/get-document storage id-val branch)))
+            actually-deleted? (and pre-exists? (not post-exists?))]
+        (if (and pre-exists? post-exists?)
+          ;; Document still exists after delete attempt — operation failed
+          {:type "error"
+           :message (str "DELETE failed for id '" id-val "' in table '" table-name "'")}
+          {:type "delete"
+           :affected (cond
+                       actually-deleted? 1
+                       ;; Non-id WHERE — count difference would require scanning again,
+                       ;; but ChronDB DELETE only supports WHERE id = ... currently
+                       (not id-val) 0
+                       :else 0)}))
 
       :show-tables
       (let [docs (storage/get-documents-by-prefix storage "" branch)
