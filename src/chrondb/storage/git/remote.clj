@@ -169,7 +169,7 @@
                   (let [status (.getStatus update)]
                     (when-not (#{org.eclipse.jgit.transport.RemoteRefUpdate$Status/OK
                                  org.eclipse.jgit.transport.RemoteRefUpdate$Status/UP_TO_DATE}
-                              status)
+                               status)
                       (log/log-warn (str "Push ref update status: " status
                                          " for " (.getRemoteName update)))))))
               (log/log-info "Push completed successfully")
@@ -200,7 +200,7 @@
         (log/log-info "Fetching from remote...")
         (let [branch (get-in config-map [:git :default-branch] "main")
               branch-spec (RefSpec. (str "+refs/heads/" branch
-                                        ":refs/remotes/origin/" branch))]
+                                         ":refs/remotes/origin/" branch))]
           ;; Fetch branch refs
           (-> git
               (.fetch)

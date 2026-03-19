@@ -23,7 +23,8 @@ dependencies {
 import chrondb.ChronDB
 import org.json.JSONObject
 
-val db = ChronDB.open("/tmp/data", "/tmp/index")
+// Single path (preferred)
+val db = ChronDB.openPath("./mydb")
 
 // Save a document
 val doc = JSONObject().put("name", "Alice").put("age", 30)
@@ -34,11 +35,17 @@ val result = db.get("user:1", null)
 println(result) // {"name":"Alice","age":30}
 ```
 
+> **Legacy API (deprecated):** `ChronDB.open("/tmp/data", "/tmp/index")` still works but is deprecated. Use `openPath` instead.
+
 ## API Reference
 
-### `ChronDB.open(dataPath: String, indexPath: String): ChronDB`
+### `ChronDB.openPath(dbPath: String): ChronDB`
 
-Opens a database connection.
+Opens a database connection using a single directory path. Data and index are stored in subdirectories automatically.
+
+### `ChronDB.open(dataPath: String, indexPath: String): ChronDB` *(deprecated)*
+
+> **Deprecated.** Use `openPath` instead. This method still works but will be removed in a future release.
 
 ### `ChronDB.openWithIdleTimeout(dataPath: String, indexPath: String, idleTimeoutSecs: ULong): ChronDB`
 
@@ -55,6 +62,7 @@ Opens a database with idle timeout. The GraalVM isolate suspends after the speci
 | `listByTable(table, branch?)` | List documents by table |
 | `history(id, branch?)` | Get change history |
 | `query(queryJson, branch?)` | Execute a Lucene query |
+| `executeSql(sql, branch?)` | Execute a SQL query directly |
 
 ## Error Handling
 
@@ -63,7 +71,7 @@ import chrondb.ChronDB
 import chrondb.ChronDBError
 
 try {
-    val db = ChronDB.open("/tmp/data", "/tmp/index")
+    val db = ChronDB.openPath("./mydb")
     val doc = db.get("user:999", null)
 } catch (e: ChronDBError.NotFound) {
     println("Document does not exist")
@@ -72,7 +80,23 @@ try {
 }
 ```
 
-## Example with Idle Timeout
+## Examples
+
+### SQL Queries
+
+Execute SQL queries directly without needing a running server:
+
+```kotlin
+val db = ChronDB.openPath("./mydb")
+
+db.put("user:1", """{"name": "Alice", "age": 30}""", null)
+db.put("user:2", """{"name": "Bob", "age": 25}""", null)
+
+val result = db.executeSql("SELECT * FROM user", null)
+println(result) // {"type":"select","columns":[...],"rows":[...],"count":2}
+```
+
+### Idle Timeout
 
 ```kotlin
 // Isolate suspends after 2 minutes of inactivity

@@ -36,7 +36,7 @@
   "Creates a unique temporary directory path for test repositories."
   []
   (let [dir (str (Files/createTempDirectory "chrondb-concurrency-test"
-                                             (make-array FileAttribute 0)))]
+                                            (make-array FileAttribute 0)))]
     dir))
 
 (defn delete-directory

@@ -5,6 +5,7 @@ plus context manager support and idiomatic exception hierarchy.
 """
 
 import json
+import warnings
 from typing import Any, Dict, List, Optional
 
 from chrondb._generated import chrondb as _ffi
@@ -32,32 +33,49 @@ class ChronDB:
 
     Use as a context manager for automatic cleanup:
 
-        with ChronDB("/tmp/data", "/tmp/index") as db:
+        with ChronDB("/tmp/mydb") as db:
             db.put("user:1", {"name": "Alice"})
             doc = db.get("user:1")
 
     For long-running services, use ``idle_timeout`` to suspend the GraalVM
     isolate when idle:
 
-        db = ChronDB("/tmp/data", "/tmp/index", idle_timeout=120)
+        db = ChronDB("/tmp/mydb", idle_timeout=120)
     """
 
-    def __init__(self, data_path: str, index_path: str,
+    def __init__(self, db_path: str, index_path: Optional[str] = None,
                  idle_timeout: Optional[int] = None):
         """Open a ChronDB database.
 
         Args:
-            data_path: Path for the Git repository (data storage).
-            index_path: Path for the Lucene index.
+            db_path: Path for the database directory. When used alone, the
+                index is stored automatically inside this directory.
+            index_path: Deprecated. Separate index path. If provided, db_path
+                is used as data_path for backward compatibility.
             idle_timeout: Seconds of inactivity before suspending the GraalVM
                 isolate. None (default) keeps it alive for the entire lifetime.
         """
         try:
-            if idle_timeout is not None:
-                self._inner = _ffi.ChronDb.open_with_idle_timeout(
-                    data_path, index_path, idle_timeout)
+            if index_path is not None:
+                warnings.warn(
+                    "Passing separate data_path and index_path is deprecated. "
+                    "Use ChronDB(db_path) instead — the index is managed "
+                    "automatically inside the database directory.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if idle_timeout is not None:
+                    self._inner = _ffi.ChronDb.open_with_idle_timeout(
+                        db_path, index_path, idle_timeout)
+                else:
+                    self._inner = _ffi.ChronDb.open(db_path, index_path)
             else:
-                self._inner = _ffi.ChronDb.open(data_path, index_path)
+                if idle_timeout is not None:
+                    idx = f"{db_path}/.chrondb-index"
+                    self._inner = _ffi.ChronDb.open_with_idle_timeout(
+                        db_path, idx, idle_timeout)
+                else:
+                    self._inner = _ffi.ChronDb.open_path(db_path)
         except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
 
@@ -155,6 +173,26 @@ class ChronDB:
         """Execute a query against the Lucene index."""
         try:
             result = self._inner.query(json.dumps(query), branch)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
+
+    def execute(self, sql: str,
+                branch: Optional[str] = None) -> Dict[str, Any]:
+        """Execute a SQL query against the database.
+
+        Args:
+            sql: SQL statement (SELECT, INSERT, UPDATE, DELETE, etc.).
+            branch: Optional branch name.
+
+        Returns:
+            Result dict with structure depending on query type:
+            - SELECT: {"type":"select","columns":[...],"rows":[...],"count":N}
+            - INSERT/UPDATE/DELETE: {"type":"...","affected":N}
+            - Error: {"type":"error","message":"..."}
+        """
+        try:
+            result = self._inner.execute_sql(sql, branch)
             return json.loads(result)
         except _ffi.ChronDbError as e:
             raise _convert_error(e) from e

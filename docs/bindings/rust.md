@@ -81,7 +81,8 @@ use chrondb::ChronDB;
 use serde_json::json;
 
 fn main() -> chrondb::Result<()> {
-    let db = ChronDB::open("/tmp/chrondb-data", "/tmp/chrondb-index")?;
+    // Single path (preferred)
+    let db = ChronDB::open_path("./mydb")?;
 
     // Save a document
     db.put("user:1", &json!({"name": "Alice", "age": 30}), None)?;
@@ -95,11 +96,29 @@ fn main() -> chrondb::Result<()> {
 }
 ```
 
+> **Legacy API (deprecated):** `ChronDB::open("/tmp/data", "/tmp/index")` still works but is deprecated. Use `open_path` instead.
+
 ## API Reference
 
-### `ChronDB::open(data_path, index_path) -> Result<ChronDB>`
+### `ChronDB::open_path(db_path) -> Result<ChronDB>`
 
-Opens a database connection. The GraalVM isolate stays alive for the entire lifetime of the instance.
+Opens a database connection using a single directory path. Data and index are stored in subdirectories automatically.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db_path` | `&str` | Path for the database (data and index stored inside) |
+
+**Returns:** `Result<ChronDB>`
+
+**Errors:** `IsolateCreationFailed`, `OpenFailed(reason)`
+
+---
+
+### `ChronDB::open(data_path, index_path) -> Result<ChronDB>` *(deprecated)*
+
+> **Deprecated.** Use `open_path` instead. This method still works but will be removed in a future release.
+
+Opens a database connection with separate data and index paths.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -254,6 +273,21 @@ Executes a query against the Lucene index.
 
 ---
 
+### `execute_sql(&self, sql, branch) -> Result<serde_json::Value>`
+
+Executes a SQL query directly against the database without needing a running server.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sql` | `&str` | SQL query string |
+| `branch` | `Option<&str>` | Branch name (`None` for default) |
+
+**Returns:** Result object with `type`, `columns`, `rows`, `count`.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
 ### `last_error(&self) -> Option<String>`
 
 Returns the last error message from the native library, if any.
@@ -310,7 +344,7 @@ pub type Result<T> = std::result::Result<T, ChronDBError>;
 use chrondb::{ChronDB, ChronDBError};
 
 fn main() {
-    let db = ChronDB::open("/tmp/data", "/tmp/index").unwrap();
+    let db = ChronDB::open_path("./mydb").unwrap();
 
     match db.get("user:999", None) {
         Ok(doc) => println!("Found: {}", doc),
@@ -329,7 +363,7 @@ use chrondb::ChronDB;
 use serde_json::json;
 
 fn main() -> chrondb::Result<()> {
-    let db = ChronDB::open("/tmp/data", "/tmp/index")?;
+    let db = ChronDB::open_path("./mydb")?;
 
     // Create
     db.put("user:1", &json!({"name": "Alice", "email": "alice@example.com"}), None)?;
@@ -365,7 +399,7 @@ use chrondb::ChronDB;
 use serde_json::json;
 
 fn main() -> chrondb::Result<()> {
-    let db = ChronDB::open("/tmp/data", "/tmp/index")?;
+    let db = ChronDB::open_path("./mydb")?;
 
     db.put("product:1", &json!({"name": "Laptop", "price": 999}), None)?;
     db.put("product:2", &json!({"name": "Mouse", "price": 29}), None)?;
@@ -389,13 +423,38 @@ use chrondb::ChronDB;
 use serde_json::json;
 
 fn main() -> chrondb::Result<()> {
-    let db = ChronDB::open("/tmp/data", "/tmp/index")?;
+    let db = ChronDB::open_path("./mydb")?;
 
     db.put("config:app", &json!({"version": "1.0"}), None)?;
     db.put("config:app", &json!({"version": "2.0"}), None)?;
 
     let entries = db.history("config:app", None)?;
     println!("History: {}", entries);
+
+    Ok(())
+}
+```
+
+### SQL Queries
+
+Execute SQL queries directly without needing a running server:
+
+```rust
+use chrondb::ChronDB;
+use serde_json::json;
+
+fn main() -> chrondb::Result<()> {
+    let db = ChronDB::open_path("./mydb")?;
+
+    db.put("user:1", &json!({"name": "Alice", "age": 30}), None)?;
+    db.put("user:2", &json!({"name": "Bob", "age": 25}), None)?;
+
+    let result = db.execute_sql("SELECT * FROM user", None)?;
+    println!("Columns: {}", result["columns"]);
+    println!("Count: {}", result["count"]);
+
+    let result = db.execute_sql("SELECT * FROM user WHERE name = 'Alice'", None)?;
+    println!("Rows: {}", result["rows"]);
 
     Ok(())
 }
@@ -408,7 +467,7 @@ use chrondb::ChronDB;
 use serde_json::json;
 
 fn do_work() -> chrondb::Result<()> {
-    let db = ChronDB::open("/tmp/data", "/tmp/index")?;
+    let db = ChronDB::open_path("./mydb")?;
     db.put("temp:1", &json!({"data": "value"}), None)?;
     Ok(())
     // db is dropped here, closing the connection

@@ -85,6 +85,13 @@
                        :exec-fn chrondb.core/-main
                        :exec-args {:args ["--disable-rest" "--disable-redis"]}
                        :doc "Run only the SQL protocol server (no REST API and no Redis)"}
+             :local {:main-opts ["-m" "chrondb.cli.local"]
+                     :doc "Open a database locally (no server required).
+                           Usage: clojure -M:local ./mydb [command]
+                           Examples:
+                           clojure -M:local ./mydb                          # Interactive shell
+                           clojure -M:local ./mydb \"SELECT * FROM users\"  # Execute SQL
+                           clojure -M:local ./mydb get user:1               # Get document"}
              :example {:main-opts ["-m" "chrondb.example"]
                        :exec-fn chrondb.example/-main}
              :build {:deps {io.github.clojure/tools.build {:git/tag "v0.9.4" :git/sha "76b78fe"}}

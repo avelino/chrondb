@@ -144,10 +144,10 @@
   "Get or create a lock for a branch."
   [branch]
   (get (swap! branch-locks
-             (fn [locks]
-               (if (contains? locks branch)
-                 locks
-                 (assoc locks branch (Object.)))))
+              (fn [locks]
+                (if (contains? locks branch)
+                  locks
+                  (assoc locks branch (Object.)))))
        branch))
 
 (defmacro with-branch-lock

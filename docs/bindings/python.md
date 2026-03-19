@@ -42,7 +42,8 @@ export CHRONDB_LIB_PATH=/path/to/libchrondb.so
 ```python
 from chrondb import ChronDB
 
-with ChronDB("/tmp/chrondb-data", "/tmp/chrondb-index") as db:
+# Single path (preferred)
+with ChronDB("./mydb") as db:
     # Save a document
     db.put("user:1", {"name": "Alice", "age": 30})
 
@@ -51,16 +52,17 @@ with ChronDB("/tmp/chrondb-data", "/tmp/chrondb-index") as db:
     print(doc)  # {"name": "Alice", "age": 30}
 ```
 
+> **Legacy API (deprecated):** `ChronDB("/tmp/data", "/tmp/index")` still works but is deprecated. Use the single-path form instead.
+
 ## API Reference
 
-### `ChronDB(data_path: str, index_path: str, idle_timeout: float = None)`
+### `ChronDB(db_path: str, idle_timeout: float = None)`
 
-Opens a database connection.
+Opens a database connection using a single directory path. Data and index are stored in subdirectories automatically.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `data_path` | `str` | Path for the Git repository (data storage) |
-| `index_path` | `str` | Path for the Lucene index |
+| `db_path` | `str` | Path for the database (data and index stored inside) |
 | `idle_timeout` | `Optional[float]` | Seconds of inactivity before suspending the GraalVM isolate. `None` (default) keeps it alive for the entire lifetime. |
 
 When `idle_timeout` is set, the GraalVM isolate is automatically closed after the specified seconds of inactivity, freeing CPU and memory. The next operation transparently reopens it. See [Idle Timeout](#idle-timeout-long-running-services) for details.
@@ -68,6 +70,16 @@ When `idle_timeout` is set, the GraalVM isolate is automatically closed after th
 **Raises:** `ChronDBError` if the database cannot be opened.
 
 Implements the context manager protocol (`__enter__` / `__exit__`), calling `close()` automatically on exit.
+
+#### Legacy: `ChronDB(data_path: str, index_path: str, idle_timeout: float = None)`
+
+> **Deprecated.** The two-path constructor still works but is deprecated. Use the single-path form above.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `data_path` | `str` | Path for the Git repository (data storage) |
+| `index_path` | `str` | Path for the Lucene index |
+| `idle_timeout` | `Optional[float]` | Seconds of inactivity before suspending the GraalVM isolate |
 
 ---
 
@@ -171,6 +183,21 @@ Executes a query against the Lucene index.
 
 ---
 
+### `execute(sql, branch=None) -> Dict[str, Any]`
+
+Executes a SQL query directly against the database without needing a running server.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sql` | `str` | SQL query string |
+| `branch` | `Optional[str]` | Branch name (`None` for default) |
+
+**Returns:** Result dict with keys `type`, `columns`, `rows`, `count`.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
 ### `close()`
 
 Closes the database connection and releases native resources. Called automatically when using the context manager.
@@ -211,7 +238,7 @@ Raised by `get()` and `delete()` when the target document does not exist.
 from chrondb import ChronDB, ChronDBError, DocumentNotFoundError
 
 try:
-    with ChronDB("/tmp/data", "/tmp/index") as db:
+    with ChronDB("./mydb") as db:
         doc = db.get("user:999")
 except DocumentNotFoundError:
     print("Document does not exist")
@@ -226,7 +253,7 @@ except ChronDBError as e:
 ```python
 from chrondb import ChronDB
 
-with ChronDB("/tmp/data", "/tmp/index") as db:
+with ChronDB("./mydb") as db:
     # Create
     db.put("user:1", {"name": "Alice", "email": "alice@example.com"})
     db.put("user:2", {"name": "Bob", "email": "bob@example.com"})
@@ -251,7 +278,7 @@ with ChronDB("/tmp/data", "/tmp/index") as db:
 ### Query
 
 ```python
-with ChronDB("/tmp/data", "/tmp/index") as db:
+with ChronDB("./mydb") as db:
     db.put("product:1", {"name": "Laptop", "price": 999})
     db.put("product:2", {"name": "Mouse", "price": 29})
 
@@ -266,13 +293,30 @@ with ChronDB("/tmp/data", "/tmp/index") as db:
 ### History (Time Travel)
 
 ```python
-with ChronDB("/tmp/data", "/tmp/index") as db:
+with ChronDB("./mydb") as db:
     db.put("config:app", {"version": "1.0"})
     db.put("config:app", {"version": "2.0"})
 
     entries = db.history("config:app")
     for entry in entries:
         print(entry)
+```
+
+### SQL Queries
+
+Execute SQL queries directly without needing a running server:
+
+```python
+with ChronDB("./mydb") as db:
+    db.put("user:1", {"name": "Alice", "age": 30})
+    db.put("user:2", {"name": "Bob", "age": 25})
+
+    result = db.execute("SELECT * FROM user")
+    print(result["columns"])  # ["name", "age"]
+    print(result["count"])    # 2
+
+    result = db.execute("SELECT * FROM user WHERE name = 'Alice'")
+    print(result["rows"])     # [{"name": "Alice", "age": 30}]
 ```
 
 ### Idle Timeout (long-running services)
@@ -283,7 +327,7 @@ ChronDB loads a GraalVM native-image shared library whose internal threads consu
 from chrondb import ChronDB
 
 # Isolate suspends after 2 minutes of inactivity
-db = ChronDB("/tmp/data", "/tmp/index", idle_timeout=120)
+db = ChronDB("./mydb", idle_timeout=120)
 
 # Normal usage — no change in API
 db.put("audit:1", {"action": "login"})
@@ -309,9 +353,7 @@ from chrondb import ChronDB
 
 @pytest.fixture
 def db(tmp_path):
-    data_path = str(tmp_path / "data")
-    index_path = str(tmp_path / "index")
-    with ChronDB(data_path, index_path) as conn:
+    with ChronDB(str(tmp_path / "db")) as conn:
         yield conn
 
 def test_put_and_get(db):

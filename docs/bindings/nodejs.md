@@ -17,7 +17,8 @@ npm install chrondb
 ```javascript
 const { ChronDB } = require('chrondb')
 
-const db = new ChronDB('/tmp/data', '/tmp/index')
+// Single path (preferred)
+const db = new ChronDB('./mydb')
 
 // Save a document
 db.put('user:1', { name: 'Alice', age: 30 })
@@ -27,27 +28,38 @@ const doc = db.get('user:1')
 console.log(doc) // { name: 'Alice', age: 30 }
 ```
 
+> **Legacy API (deprecated):** `new ChronDB('/tmp/data', '/tmp/index')` still works but is deprecated. Use the single-path form instead.
+
 ### ES Modules
 
 ```javascript
 import { ChronDB } from 'chrondb'
 
-const db = new ChronDB('/tmp/data', '/tmp/index')
+const db = new ChronDB('./mydb')
 ```
 
 ## API Reference
 
-### `new ChronDB(dataPath, indexPath, options?)`
+### `new ChronDB(dbPath, options?)`
 
-Opens a database connection.
+Opens a database connection using a single directory path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dbPath` | `string` | Path for the database (data and index stored inside) |
+| `options.idleTimeout` | `number` | Seconds of inactivity before suspending the GraalVM isolate |
+
+**Throws:** `Error` if the database cannot be opened.
+
+#### Legacy: `new ChronDB(dataPath, indexPath, options?)`
+
+> **Deprecated.** The two-path constructor still works but is deprecated. Use the single-path form above.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `dataPath` | `string` | Path for the Git repository (data storage) |
 | `indexPath` | `string` | Path for the Lucene index |
 | `options.idleTimeout` | `number` | Seconds of inactivity before suspending the GraalVM isolate |
-
-**Throws:** `Error` if the database cannot be opened.
 
 ---
 
@@ -99,6 +111,19 @@ Returns the change history of a document.
 
 Executes a query against the Lucene index.
 
+---
+
+### `execute(sql, branch?) -> Object`
+
+Executes a SQL query directly against the database without needing a running server.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sql` | `string` | SQL query string |
+| `branch` | `string \| null` | Branch name |
+
+**Returns:** Result object with `type`, `columns`, `rows`, `count`.
+
 ## TypeScript
 
 Full TypeScript definitions are included:
@@ -106,7 +131,7 @@ Full TypeScript definitions are included:
 ```typescript
 import { ChronDB, ChronDBOptions } from 'chrondb'
 
-const db = new ChronDB('/tmp/data', '/tmp/index', { idleTimeout: 120 })
+const db = new ChronDB('./mydb', { idleTimeout: 120 })
 
 const doc: Record<string, unknown> = db.get('user:1')
 ```
@@ -117,7 +142,7 @@ const doc: Record<string, unknown> = db.get('user:1')
 const { ChronDB } = require('chrondb')
 
 try {
-  const db = new ChronDB('/tmp/data', '/tmp/index')
+  const db = new ChronDB('./mydb')
   const doc = db.get('user:999')
 } catch (err) {
   if (err.message.includes('not found')) {
@@ -135,7 +160,7 @@ try {
 ```javascript
 const { ChronDB } = require('chrondb')
 
-const db = new ChronDB('/tmp/data', '/tmp/index')
+const db = new ChronDB('./mydb')
 
 // Create
 db.put('user:1', { name: 'Alice', email: 'alice@example.com' })
@@ -158,12 +183,30 @@ const users = db.listByTable('user')
 
 ```javascript
 // Isolate suspends after 2 minutes of inactivity
-const db = new ChronDB('/tmp/data', '/tmp/index', { idleTimeout: 120 })
+const db = new ChronDB('./mydb', { idleTimeout: 120 })
 
 db.put('audit:1', { action: 'login' })
 
 // After 120s without operations, the GraalVM isolate is torn down.
 // The next call transparently reopens it.
+```
+
+### SQL Queries
+
+Execute SQL queries directly without needing a running server:
+
+```javascript
+const db = new ChronDB('./mydb')
+
+db.put('user:1', { name: 'Alice', age: 30 })
+db.put('user:2', { name: 'Bob', age: 25 })
+
+const result = db.execute('SELECT * FROM user')
+console.log(result.columns) // ['name', 'age']
+console.log(result.count)   // 2
+
+const filtered = db.execute("SELECT * FROM user WHERE name = 'Alice'")
+console.log(filtered.rows)  // [{ name: 'Alice', age: 30 }]
 ```
 
 ### Query
