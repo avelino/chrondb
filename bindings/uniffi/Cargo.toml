@@ -1,6 +1,6 @@
 [package]
 name = "chrondb-uniffi"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 description = "UniFFI bindings for ChronDB — generates Python, Ruby, Kotlin, Swift"
 license = "AGPL-3.0"

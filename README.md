@@ -50,7 +50,7 @@ docker run -d --name chrondb \
 In your `deps.edn`:
 
 ```clojure
-{:deps {com.github.avelino/chrondb {:git/tag "v0.1.0"
+{:deps {com.github.avelino/chrondb {:git/tag "v0.2.1"
                                      :git/sha "..."}}}
 ```
 

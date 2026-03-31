@@ -1,6 +1,6 @@
 [package]
 name = "chrondb"
-version = "0.1.1"
+version = "0.2.1"
 edition = "2021"
 description = "Rust bindings for ChronDB - a time-traveling key/value database"
 license = "AGPL-3.0"

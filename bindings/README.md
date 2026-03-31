@@ -157,16 +157,16 @@ CHRONDB_LIB_PATH=../../target/libchrondb.dylib pytest tests/ -v
 
 ## Installing from GitHub Releases
 
-Pre-built binaries are available as GitHub Releases. Each push to `main` updates a rolling `latest` prerelease; tagged versions (e.g. `v0.1.0`) produce stable releases.
+Pre-built binaries are available as GitHub Releases. Each push to `main` updates a rolling `latest` prerelease; tagged versions (e.g. `v0.2.1`) produce stable releases.
 
 ### Python
 
 ```bash
 # Latest stable release (Linux x86_64)
-pip install https://github.com/avelino/chrondb/releases/download/v0.1.0/chrondb-0.1.0-py3-none-manylinux_2_35_x86_64.whl
+pip install https://github.com/avelino/chrondb/releases/download/v0.2.1/chrondb-0.2.1-py3-none-manylinux_2_35_x86_64.whl
 
 # Latest stable release (macOS ARM64)
-pip install https://github.com/avelino/chrondb/releases/download/v0.1.0/chrondb-0.1.0-py3-none-macosx_14_0_arm64.whl
+pip install https://github.com/avelino/chrondb/releases/download/v0.2.1/chrondb-0.2.1-py3-none-macosx_14_0_arm64.whl
 
 # Rolling release from main (Linux)
 pip install https://github.com/avelino/chrondb/releases/download/latest/chrondb-latest-py3-none-manylinux_2_35_x86_64.whl

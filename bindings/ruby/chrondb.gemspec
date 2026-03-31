@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = "chrondb"
-  s.version     = "0.1.0"
+  s.version     = "0.2.1"
   s.summary     = "Ruby client for ChronDB"
   s.description = "Ruby bindings for ChronDB — a time-traveling key/value database built on Git architecture. Auto-generated from the Rust SDK via UniFFI."
   s.authors     = ["Thiago Avelino"]
