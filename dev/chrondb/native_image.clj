@@ -352,6 +352,42 @@
     :allPublicConstructors true
     :allDeclaredMethods true
     :allPublicMethods true}
+   {:name "org.eclipse.jgit.transport.URIish"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.api.RemoteAddCommand"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.api.PushCommand"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.api.FetchCommand"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.transport.RefSpec"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.transport.RemoteRefUpdate"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true}
+   {:name "org.eclipse.jgit.transport.RemoteRefUpdate$Status"
+    :allDeclaredConstructors true
+    :allPublicConstructors true
+    :allDeclaredMethods true
+    :allPublicMethods true
+    :allDeclaredFields true}
    {:name "org.eclipse.jgit.revwalk.RevObject"
     :allDeclaredConstructors true
     :allPublicConstructors true
