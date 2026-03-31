@@ -145,6 +145,41 @@ impl ChronDB {
         Ok(result.to_string())
     }
 
+    fn setup_remote(&self, remote_url: String) -> Result<String, ChronDBError> {
+        let result = self.inner.setup_remote(&remote_url)?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn push(&self) -> Result<String, ChronDBError> {
+        let result = self.inner.push()?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn pull(&self) -> Result<String, ChronDBError> {
+        let result = self.inner.pull()?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn fetch(&self) -> Result<String, ChronDBError> {
+        let result = self.inner.fetch()?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn remote_status(&self) -> Result<String, ChronDBError> {
+        let result = self.inner.remote_status()?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
     fn last_error(&self) -> Option<String> {
         self.inner.last_error()
     }

@@ -102,6 +102,22 @@ enum FfiCommand {
     LastError {
         reply: Sender<Option<String>>,
     },
+    SetupRemote {
+        remote_url: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    Push {
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    Pull {
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    Fetch {
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    RemoteStatus {
+        reply: Sender<Result<serde_json::Value>>,
+    },
     Shutdown,
 }
 
@@ -327,6 +343,60 @@ impl FfiWorkerState {
 
         if result.is_null() {
             return Err(self.last_error_or("execute_sql failed"));
+        }
+        self.parse_string_result(result)
+    }
+
+    fn handle_setup_remote(&self, remote_url: &str) -> Result<serde_json::Value> {
+        let c_url =
+            CString::new(remote_url).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+
+        let result = unsafe {
+            (self.lib.chrondb_setup_remote)(
+                self.thread,
+                self.handle,
+                c_url.as_ptr() as *mut c_char,
+            )
+        };
+
+        if result.is_null() {
+            return Err(self.last_error_or("setup_remote failed"));
+        }
+        self.parse_string_result(result)
+    }
+
+    fn handle_push(&self) -> Result<serde_json::Value> {
+        let result = unsafe { (self.lib.chrondb_push)(self.thread, self.handle) };
+
+        if result.is_null() {
+            return Err(self.last_error_or("push failed"));
+        }
+        self.parse_string_result(result)
+    }
+
+    fn handle_pull(&self) -> Result<serde_json::Value> {
+        let result = unsafe { (self.lib.chrondb_pull)(self.thread, self.handle) };
+
+        if result.is_null() {
+            return Err(self.last_error_or("pull failed"));
+        }
+        self.parse_string_result(result)
+    }
+
+    fn handle_fetch(&self) -> Result<serde_json::Value> {
+        let result = unsafe { (self.lib.chrondb_fetch)(self.thread, self.handle) };
+
+        if result.is_null() {
+            return Err(self.last_error_or("fetch failed"));
+        }
+        self.parse_string_result(result)
+    }
+
+    fn handle_remote_status(&self) -> Result<serde_json::Value> {
+        let result = unsafe { (self.lib.chrondb_remote_status)(self.thread, self.handle) };
+
+        if result.is_null() {
+            return Err(self.last_error_or("remote_status failed"));
         }
         self.parse_string_result(result)
     }
@@ -664,6 +734,26 @@ impl ChronDB {
             FfiCommand::LastError { reply } => {
                 let _ = reply.send(state.get_last_error());
             }
+            FfiCommand::SetupRemote { remote_url, reply } => {
+                let result = state.handle_setup_remote(&remote_url);
+                let _ = reply.send(result);
+            }
+            FfiCommand::Push { reply } => {
+                let result = state.handle_push();
+                let _ = reply.send(result);
+            }
+            FfiCommand::Pull { reply } => {
+                let result = state.handle_pull();
+                let _ = reply.send(result);
+            }
+            FfiCommand::Fetch { reply } => {
+                let result = state.handle_fetch();
+                let _ = reply.send(result);
+            }
+            FfiCommand::RemoteStatus { reply } => {
+                let result = state.handle_remote_status();
+                let _ = reply.send(result);
+            }
             FfiCommand::Shutdown => return true,
         }
         false
@@ -763,6 +853,11 @@ impl ChronDB {
             FfiCommand::Query { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::ExecuteSql { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::LastError { reply, .. } => { let _ = reply.send(None); }
+            FfiCommand::SetupRemote { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Push { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Pull { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Fetch { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::RemoteStatus { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::Shutdown => {}
         }
     }
@@ -941,6 +1036,91 @@ impl ChronDB {
     /// Convenience alias for [`execute_sql`](Self::execute_sql).
     pub fn execute(&self, sql: &str, branch: Option<&str>) -> Result<serde_json::Value> {
         self.execute_sql(sql, branch)
+    }
+
+    /// Configures a remote repository URL for syncing.
+    ///
+    /// # Arguments
+    /// * `remote_url` - The remote Git URL (e.g., "git@github.com:org/repo.git")
+    pub fn setup_remote(&self, remote_url: &str) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::SetupRemote {
+                remote_url: remote_url.to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Pushes local changes to the configured remote repository.
+    ///
+    /// Returns a JSON value with `{"type":"ok","status":"pushed"|"skipped"|"deferred"}`.
+    pub fn push(&self) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::Push { reply: reply_tx })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Pulls changes from the configured remote repository.
+    ///
+    /// Fetches and fast-forwards the local branch.
+    /// Returns a JSON value with `{"type":"ok","status":"pulled"|"current"|"skipped"|"conflict"}`.
+    pub fn pull(&self) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::Pull { reply: reply_tx })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Fetches changes from the configured remote without merging.
+    ///
+    /// Returns a JSON value with `{"type":"ok","status":"fetched"|"skipped"}`.
+    pub fn fetch(&self) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::Fetch { reply: reply_tx })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Returns the remote configuration status.
+    ///
+    /// Returns a JSON value with `{"type":"ok","configured":true|false}`.
+    pub fn remote_status(&self) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        self.shared
+            .sender
+            .send(FfiCommand::RemoteStatus { reply: reply_tx })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+
+        reply_rx
+            .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
     }
 
     /// Returns the last error message from the native library, if any.

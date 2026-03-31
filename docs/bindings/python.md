@@ -198,6 +198,60 @@ Executes a SQL query directly against the database without needing a running ser
 
 ---
 
+### `setup_remote(remote_url) -> Dict[str, Any]`
+
+Configures a remote Git repository URL for syncing.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `remote_url` | `str` | Remote Git URL (e.g., `"git@github.com:org/repo.git"`) |
+
+**Returns:** `{"type": "ok", "remote_url": "..."}` on success.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
+### `push() -> Dict[str, Any]`
+
+Pushes local changes to the configured remote repository.
+
+**Returns:** `{"type": "ok", "status": "pushed"}` on success, `{"type": "ok", "status": "skipped"}` if no remote is configured.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
+### `pull() -> Dict[str, Any]`
+
+Pulls changes from the configured remote repository. Fetches and fast-forwards the local branch.
+
+**Returns:** `{"type": "ok", "status": "pulled|current|skipped|conflict"}`.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
+### `fetch() -> Dict[str, Any]`
+
+Fetches changes from the configured remote without merging.
+
+**Returns:** `{"type": "ok", "status": "fetched|skipped"}`.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
+### `remote_status() -> Dict[str, Any]`
+
+Returns whether a remote repository is configured.
+
+**Returns:** `{"type": "ok", "configured": true|false}`.
+
+**Raises:** `ChronDBError` on failure.
+
+---
+
 ### `close()`
 
 Closes the database connection and releases native resources. Called automatically when using the context manager.
@@ -317,6 +371,29 @@ with ChronDB("./mydb") as db:
 
     result = db.execute("SELECT * FROM user WHERE name = 'Alice'")
     print(result["rows"])     # [{"name": "Alice", "age": 30}]
+```
+
+### Remote Sync
+
+```python
+with ChronDB("./mydb") as db:
+    # Configure remote
+    db.setup_remote("git@github.com:org/data.git")
+
+    # Write data locally
+    db.put("user:1", {"name": "Alice"})
+
+    # Push to remote
+    result = db.push()
+    print(result["status"])  # "pushed"
+
+    # Pull latest from remote
+    result = db.pull()
+    print(result["status"])  # "pulled" or "current"
+
+    # Check remote status
+    status = db.remote_status()
+    print(status["configured"])  # True
 ```
 
 ### Idle Timeout (long-running services)
