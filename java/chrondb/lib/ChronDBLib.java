@@ -32,6 +32,11 @@ public final class ChronDBLib {
     private static IFn libHistory;
     private static IFn libQuery;
     private static IFn libExecuteSql;
+    private static IFn libSetupRemote;
+    private static IFn libPush;
+    private static IFn libPull;
+    private static IFn libFetch;
+    private static IFn libRemoteStatus;
 
     private static synchronized void ensureInitialized() {
         if (!initialized) {
@@ -49,6 +54,11 @@ public final class ChronDBLib {
             libHistory = Clojure.var("chrondb.lib.core", "lib-history");
             libQuery = Clojure.var("chrondb.lib.core", "lib-query");
             libExecuteSql = Clojure.var("chrondb.lib.core", "lib-execute-sql");
+            libSetupRemote = Clojure.var("chrondb.lib.core", "lib-setup-remote");
+            libPush = Clojure.var("chrondb.lib.core", "lib-push");
+            libPull = Clojure.var("chrondb.lib.core", "lib-pull");
+            libFetch = Clojure.var("chrondb.lib.core", "lib-fetch");
+            libRemoteStatus = Clojure.var("chrondb.lib.core", "lib-remote-status");
 
             initialized = true;
         }
@@ -280,6 +290,89 @@ public final class ChronDBLib {
                 return toCString((String) result);
             }
             lastError = ("execute_sql returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    // --- Remote Operations ---
+
+    @CEntryPoint(name = "chrondb_setup_remote")
+    public static CCharPointer setupRemote(IsolateThread thread, int handle, CCharPointer remoteUrl) {
+        try {
+            ensureInitialized();
+            String url = toJavaString(remoteUrl);
+            Object result = libSetupRemote.invoke(handle, url);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("setup_remote returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_push")
+    public static CCharPointer push(IsolateThread thread, int handle) {
+        try {
+            ensureInitialized();
+            Object result = libPush.invoke(handle);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("push returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_pull")
+    public static CCharPointer pull(IsolateThread thread, int handle) {
+        try {
+            ensureInitialized();
+            Object result = libPull.invoke(handle);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("pull returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_fetch")
+    public static CCharPointer fetch(IsolateThread thread, int handle) {
+        try {
+            ensureInitialized();
+            Object result = libFetch.invoke(handle);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("fetch returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_remote_status")
+    public static CCharPointer remoteStatus(IsolateThread thread, int handle) {
+        try {
+            ensureInitialized();
+            Object result = libRemoteStatus.invoke(handle);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("remote_status returned null");
             return WordFactory.nullPointer();
         } catch (Exception e) {
             lastError = (e.getMessage());

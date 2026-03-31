@@ -97,6 +97,16 @@ char* chrondb_history(thread, handle, id, branch)            // → JSON array
 // Query
 char* chrondb_query(thread, handle, query_json, branch)      // → JSON result
 
+// SQL
+char* chrondb_execute_sql(thread, handle, sql, branch)       // → JSON result
+
+// Remote Operations
+char* chrondb_setup_remote(thread, handle, remote_url)       // → JSON {"type":"ok",...}
+char* chrondb_push(thread, handle)                           // → JSON {"type":"ok","status":"pushed|skipped|deferred"}
+char* chrondb_pull(thread, handle)                           // → JSON {"type":"ok","status":"pulled|current|skipped|conflict"}
+char* chrondb_fetch(thread, handle)                          // → JSON {"type":"ok","status":"fetched|skipped"}
+char* chrondb_remote_status(thread, handle)                  // → JSON {"type":"ok","configured":true|false}
+
 // Utilities
 void  chrondb_free_string(thread, ptr)   // free returned strings
 char* chrondb_last_error(thread)         // last error for this thread

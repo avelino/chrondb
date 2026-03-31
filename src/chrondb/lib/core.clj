@@ -7,7 +7,9 @@
    - Each unique (data-path, index-path) pair is opened only once (singleton)
    - Multiple handles can reference the same storage/index instance
    - Operations are thread-safe via JGit's internal locking"
-  (:require [chrondb.storage.git.core :as git]
+  (:require [chrondb.config :as config]
+            [chrondb.storage.git.core :as git]
+            [chrondb.storage.git.remote :as remote]
             [chrondb.storage.protocol :as storage]
             [chrondb.index.lucene :as lucene]
             [chrondb.index.protocol :as index]
@@ -15,7 +17,8 @@
             [chrondb.util.locks :as locks]
             [clojure.data.json :as json]
             [clojure.java.io :as io])
-  (:import [java.util.concurrent.atomic AtomicInteger]))
+  (:import [java.util.concurrent.atomic AtomicInteger]
+           [org.eclipse.jgit.api Git]))
 
 (def ^:private default-index-subdir ".chrondb-index")
 
@@ -399,6 +402,97 @@
                      (assoc parsed :schema branch)
                      parsed)]
         (json/write-str (execute-sql-dispatch storage index parsed branch))))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))
+
+(defn lib-setup-remote
+  "Configures a remote repository URL for the database.
+   Returns a JSON string with the result:
+   - Success: {\"type\":\"ok\",\"remote_url\":\"...\"}
+   - Error: {\"type\":\"error\",\"message\":\"...\"}
+   Returns nil if handle is invalid."
+  [handle remote-url]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [repo (:repository storage)
+            git (Git/wrap repo)]
+        (remote/setup-remote git {:git {:remote-url remote-url}})
+        (json/write-str {:type "ok" :remote_url remote-url})))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))
+
+(defn lib-push
+  "Pushes local changes to the configured remote repository.
+   Returns a JSON string with the result:
+   - Success: {\"type\":\"ok\",\"status\":\"pushed\"}
+   - Skipped: {\"type\":\"ok\",\"status\":\"skipped\"}
+   - Error: {\"type\":\"error\",\"message\":\"...\"}
+   Returns nil if handle is invalid."
+  [handle]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [repo (:repository storage)
+            git (Git/wrap repo)
+            config-map (config/load-config)
+            result (remote/push-to-remote git config-map)]
+        (json/write-str {:type "ok" :status (name result)})))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))
+
+(defn lib-pull
+  "Pulls changes from the configured remote repository.
+   Returns a JSON string with the result:
+   - Success: {\"type\":\"ok\",\"status\":\"pulled\"}
+   - Current: {\"type\":\"ok\",\"status\":\"current\"}
+   - Skipped: {\"type\":\"ok\",\"status\":\"skipped\"}
+   - Conflict: {\"type\":\"ok\",\"status\":\"conflict\"}
+   - Error: {\"type\":\"error\",\"message\":\"...\"}
+   Returns nil if handle is invalid."
+  [handle]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [repo (:repository storage)
+            git (Git/wrap repo)
+            config-map (config/load-config)
+            result (remote/pull-from-remote git config-map)]
+        (json/write-str {:type "ok" :status (name result)})))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))
+
+(defn lib-fetch
+  "Fetches changes from the configured remote without merging.
+   Returns a JSON string with the result:
+   - Success: {\"type\":\"ok\",\"status\":\"fetched\"}
+   - Skipped: {\"type\":\"ok\",\"status\":\"skipped\"}
+   - Error: {\"type\":\"error\",\"message\":\"...\"}
+   Returns nil if handle is invalid."
+  [handle]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [repo (:repository storage)
+            git (Git/wrap repo)
+            config-map (config/load-config)
+            result (remote/fetch-from-remote git config-map)]
+        (json/write-str {:type "ok" :status (name result)})))
+    (catch Throwable e
+      (json/write-str {:type "error"
+                       :message (.getMessage e)}))))
+
+(defn lib-remote-status
+  "Returns the remote configuration status for the database.
+   Returns a JSON string:
+   - {\"type\":\"ok\",\"configured\":true/false}
+   Returns nil if handle is invalid."
+  [handle]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [repo (:repository storage)
+            configured? (remote/remote-configured? repo "origin")]
+        (json/write-str {:type "ok" :configured configured?})))
     (catch Throwable e
       (json/write-str {:type "error"
                        :message (.getMessage e)}))))

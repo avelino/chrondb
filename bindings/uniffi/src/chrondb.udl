@@ -45,5 +45,20 @@ interface ChronDB {
     [Throws=ChronDBError]
     string execute_sql(string sql, string? branch);
 
+    [Throws=ChronDBError]
+    string setup_remote(string remote_url);
+
+    [Throws=ChronDBError]
+    string push();
+
+    [Throws=ChronDBError]
+    string pull();
+
+    [Throws=ChronDBError]
+    string fetch();
+
+    [Throws=ChronDBError]
+    string remote_status();
+
     string? last_error();
 };

@@ -279,3 +279,77 @@
             (is (some? doc2) "Document 2 should persist"))
           (finally
             (lib/lib-close handle3)))))))
+
+;; --- Remote Operations Tests ---
+
+(deftest test-lib-remote-status-no-remote
+  (testing "lib-remote-status should report no remote when none is configured"
+    (let [handle (lib/lib-open *test-data-dir* *test-index-dir*)]
+      (try
+        (is (>= handle 0) "handle should be valid")
+        (let [result (lib/lib-remote-status handle)]
+          (is (some? result) "remote-status should return a result")
+          (is (string? result) "result should be JSON string")
+          (is (.contains result "\"configured\":false")
+              "should report no remote configured"))
+        (finally
+          (lib/lib-close handle))))))
+
+(deftest test-lib-remote-status-invalid-handle
+  (testing "lib-remote-status with invalid handle should return nil"
+    (let [result (lib/lib-remote-status 99999)]
+      (is (nil? result) "invalid handle should return nil"))))
+
+(deftest test-lib-push-no-remote
+  (testing "lib-push without remote should return skipped status"
+    (let [handle (lib/lib-open *test-data-dir* *test-index-dir*)]
+      (try
+        (is (>= handle 0) "handle should be valid")
+        (let [result (lib/lib-push handle)]
+          (is (some? result) "push should return a result")
+          (is (.contains result "\"status\":\"skipped\"")
+              "push without remote should be skipped"))
+        (finally
+          (lib/lib-close handle))))))
+
+(deftest test-lib-pull-no-remote
+  (testing "lib-pull without remote should return skipped status"
+    (let [handle (lib/lib-open *test-data-dir* *test-index-dir*)]
+      (try
+        (is (>= handle 0) "handle should be valid")
+        (let [result (lib/lib-pull handle)]
+          (is (some? result) "pull should return a result")
+          (is (.contains result "\"status\":\"skipped\"")
+              "pull without remote should be skipped"))
+        (finally
+          (lib/lib-close handle))))))
+
+(deftest test-lib-fetch-no-remote
+  (testing "lib-fetch without remote should return skipped status"
+    (let [handle (lib/lib-open *test-data-dir* *test-index-dir*)]
+      (try
+        (is (>= handle 0) "handle should be valid")
+        (let [result (lib/lib-fetch handle)]
+          (is (some? result) "fetch should return a result")
+          (is (.contains result "\"status\":\"skipped\"")
+              "fetch without remote should be skipped"))
+        (finally
+          (lib/lib-close handle))))))
+
+(deftest test-lib-setup-remote
+  (testing "lib-setup-remote should configure a remote URL"
+    (let [handle (lib/lib-open *test-data-dir* *test-index-dir*)]
+      (try
+        (is (>= handle 0) "handle should be valid")
+        (let [result (lib/lib-setup-remote handle "https://github.com/test/repo.git")]
+          (is (some? result) "setup-remote should return a result")
+          (is (.contains result "\"type\":\"ok\"")
+              "setup-remote should return ok")
+          (is (.contains result "repo.git")
+              "result should contain the remote URL"))
+        ;; After setup, remote-status should report configured
+        (let [status (lib/lib-remote-status handle)]
+          (is (.contains status "\"configured\":true")
+              "remote should be configured after setup"))
+        (finally
+          (lib/lib-close handle))))))

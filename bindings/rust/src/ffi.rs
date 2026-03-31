@@ -110,6 +110,32 @@ type ChrondbFreeStringFn =
 
 type ChrondbLastErrorFn = unsafe extern "C" fn(thread: *mut graal_isolatethread_t) -> *mut c_char;
 
+type ChrondbSetupRemoteFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    remote_url: *const c_char,
+) -> *mut c_char;
+
+type ChrondbPushFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+) -> *mut c_char;
+
+type ChrondbPullFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+) -> *mut c_char;
+
+type ChrondbFetchFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+) -> *mut c_char;
+
+type ChrondbRemoteStatusFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+) -> *mut c_char;
+
 /// Holds the dynamically loaded library and function pointers.
 pub struct ChronDBLib {
     #[allow(dead_code)]
@@ -129,6 +155,11 @@ pub struct ChronDBLib {
     pub chrondb_open_path: ChrondbOpenPathFn,
     pub chrondb_free_string: ChrondbFreeStringFn,
     pub chrondb_last_error: ChrondbLastErrorFn,
+    pub chrondb_setup_remote: ChrondbSetupRemoteFn,
+    pub chrondb_push: ChrondbPushFn,
+    pub chrondb_pull: ChrondbPullFn,
+    pub chrondb_fetch: ChrondbFetchFn,
+    pub chrondb_remote_status: ChrondbRemoteStatusFn,
 }
 
 // Safety: The library handle and function pointers are safe to share across threads
@@ -253,6 +284,26 @@ impl ChronDBLib {
                 .get::<ChrondbLastErrorFn>(b"chrondb_last_error")
                 .map_err(|e| format!("Symbol chrondb_last_error not found: {}", e))?;
 
+            let chrondb_setup_remote: ChrondbSetupRemoteFn = *lib
+                .get::<ChrondbSetupRemoteFn>(b"chrondb_setup_remote")
+                .map_err(|e| format!("Symbol chrondb_setup_remote not found: {}", e))?;
+
+            let chrondb_push: ChrondbPushFn = *lib
+                .get::<ChrondbPushFn>(b"chrondb_push")
+                .map_err(|e| format!("Symbol chrondb_push not found: {}", e))?;
+
+            let chrondb_pull: ChrondbPullFn = *lib
+                .get::<ChrondbPullFn>(b"chrondb_pull")
+                .map_err(|e| format!("Symbol chrondb_pull not found: {}", e))?;
+
+            let chrondb_fetch: ChrondbFetchFn = *lib
+                .get::<ChrondbFetchFn>(b"chrondb_fetch")
+                .map_err(|e| format!("Symbol chrondb_fetch not found: {}", e))?;
+
+            let chrondb_remote_status: ChrondbRemoteStatusFn = *lib
+                .get::<ChrondbRemoteStatusFn>(b"chrondb_remote_status")
+                .map_err(|e| format!("Symbol chrondb_remote_status not found: {}", e))?;
+
             Ok(ChronDBLib {
                 lib,
                 graal_create_isolate,
@@ -270,6 +321,11 @@ impl ChronDBLib {
                 chrondb_open_path,
                 chrondb_free_string,
                 chrondb_last_error,
+                chrondb_setup_remote,
+                chrondb_push,
+                chrondb_pull,
+                chrondb_fetch,
+                chrondb_remote_status,
             })
         }
     }

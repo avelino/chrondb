@@ -288,6 +288,60 @@ Executes a SQL query directly against the database without needing a running ser
 
 ---
 
+### `setup_remote(&self, remote_url) -> Result<serde_json::Value>`
+
+Configures a remote Git repository URL for syncing.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `remote_url` | `&str` | Remote Git URL (e.g., `"git@github.com:org/repo.git"`) |
+
+**Returns:** `{"type":"ok","remote_url":"..."}` on success.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
+### `push(&self) -> Result<serde_json::Value>`
+
+Pushes local changes to the configured remote repository.
+
+**Returns:** `{"type":"ok","status":"pushed"}` on success, `{"type":"ok","status":"skipped"}` if no remote is configured.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
+### `pull(&self) -> Result<serde_json::Value>`
+
+Pulls changes from the configured remote repository. Fetches and fast-forwards the local branch.
+
+**Returns:** `{"type":"ok","status":"pulled|current|skipped|conflict"}`.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
+### `fetch(&self) -> Result<serde_json::Value>`
+
+Fetches changes from the configured remote without merging.
+
+**Returns:** `{"type":"ok","status":"fetched|skipped"}`.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
+### `remote_status(&self) -> Result<serde_json::Value>`
+
+Returns whether a remote repository is configured.
+
+**Returns:** `{"type":"ok","configured":true|false}`.
+
+**Errors:** `OperationFailed(reason)`
+
+---
+
 ### `last_error(&self) -> Option<String>`
 
 Returns the last error message from the native library, if any.
@@ -455,6 +509,37 @@ fn main() -> chrondb::Result<()> {
 
     let result = db.execute_sql("SELECT * FROM user WHERE name = 'Alice'", None)?;
     println!("Rows: {}", result["rows"]);
+
+    Ok(())
+}
+```
+
+### Remote Sync
+
+```rust
+use chrondb::ChronDB;
+use serde_json::json;
+
+fn main() -> chrondb::Result<()> {
+    let db = ChronDB::open_path("./mydb")?;
+
+    // Configure remote
+    db.setup_remote("git@github.com:org/data.git")?;
+
+    // Write data locally
+    db.put("user:1", &json!({"name": "Alice"}), None)?;
+
+    // Push to remote
+    let result = db.push()?;
+    println!("Push: {}", result["status"]); // "pushed"
+
+    // Pull latest from remote
+    let result = db.pull()?;
+    println!("Pull: {}", result["status"]); // "pulled" or "current"
+
+    // Check remote status
+    let status = db.remote_status()?;
+    println!("Remote configured: {}", status["configured"]); // true
 
     Ok(())
 }
