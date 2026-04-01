@@ -18,6 +18,7 @@
 * [Schema Validation](validation.md)
 * [Version Control Features](version-control.md)
 * [Architecture](architecture.md)
+* [Indexing and Search](indexing.md)
 
 ## Connection Methods
 
@@ -26,6 +27,7 @@
 * [REST API Examples](examples-rest.md)
 * [Redis Protocol Examples](examples-redis.md)
 * [PostgreSQL Protocol Examples](examples-postgresql.md)
+* [AST Query System](ast-queries.md)
 
 ## Example Applications
 
@@ -41,13 +43,24 @@
 * [Node.js](bindings/nodejs.md)
 * [Kotlin](bindings/kotlin.md)
 * [Swift](bindings/swift.md)
+* [Best Practices](bindings/best-practices.md)
 
 ## Operations
 
 * [Configuration](configuration.md)
-* [Performance and Scalability](performance.md)
+* [Deployment Guide](deployment.md)
 * [Operations Guide](operations.md)
+* [Performance and Scalability](performance.md)
 * [Benchmark Results](benchmark.md)
+* [Troubleshooting](troubleshooting.md)
+
+## Security
+
+* [Security Best Practices](security.md)
+
+## Contributing
+
+* [Contributing Guide](../CONTRIBUTING.md)
 
 ## Releases
 

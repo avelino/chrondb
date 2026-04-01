@@ -1,0 +1,27 @@
+services:
+  chrondb:
+    image: ghcr.io/avelino/chrondb:latest
+    container_name: chrondb
+    ports:
+      - "3000:3000"   # REST API
+      - "6379:6379"   # Redis protocol
+      - "5432:5432"   # PostgreSQL protocol
+    volumes:
+      - chrondb-data:/app/data
+    environment:
+      - CHRONDB_LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+volumes:
+  chrondb-data:
+    driver: local
