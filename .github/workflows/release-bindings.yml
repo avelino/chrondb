@@ -429,10 +429,9 @@ jobs:
           PRERELEASE: ${{ needs.build-native-lib.outputs.prerelease }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
+          CRATE_VERSION="$(cat VERSION | tr -d '[:space:]')"
           if [ "$PRERELEASE" = "true" ]; then
-            CRATE_VERSION="0.0.0-dev.${RUN_NUMBER}"
-          else
-            CRATE_VERSION="${VERSION}"
+            CRATE_VERSION="${CRATE_VERSION}-dev.${RUN_NUMBER}"
           fi
           sed -i "s/^version = \".*\"/version = \"${CRATE_VERSION}\"/" Cargo.toml
 
