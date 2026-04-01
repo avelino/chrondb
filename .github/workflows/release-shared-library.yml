@@ -43,6 +43,7 @@ jobs:
             RELEASE_TAG="latest"
             PRERELEASE=true
           fi
+          echo "$VERSION" > VERSION
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
@@ -254,13 +255,6 @@ jobs:
           # Bundle GraalVM core library
           mkdir -p chrondb/lib
           cp ../../target/libchrondb.${{ matrix.lib_ext }} chrondb/lib/
-
-          # Set version by overwriting VERSION file (pyproject.toml reads from it)
-          if [ "$VERSION" != "latest" ]; then
-            echo "${VERSION}" > ../../VERSION
-          else
-            echo "0.0.0.dev${RUN_NUMBER}" > ../../VERSION
-          fi
 
       - name: Build wheel
         working-directory: bindings/python
