@@ -21,7 +21,7 @@
   []
   (or (System/getenv "CHROND_VERSION")
       (System/getenv "CI_COMMIT_SHA")
-      "0.2.0-SNAPSHOT"))
+      (-> (slurp "VERSION") string/trim)))
 
 (defn build-basis
   []
