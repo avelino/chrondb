@@ -37,13 +37,24 @@ jobs:
             RELEASE_TAG="${GITHUB_REF_NAME}"
             PRERELEASE=false
           else
-            VERSION="latest"
+            FILE_VERSION="$(cat VERSION | tr -d '[:space:]')"
+            VERSION="${FILE_VERSION}-dev.${GITHUB_RUN_NUMBER}"
             RELEASE_TAG="latest"
             PRERELEASE=true
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+
+      - name: Validate VERSION matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          FILE_VERSION="$(cat VERSION | tr -d '[:space:]')"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::VERSION file ($FILE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
 
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
@@ -213,13 +224,12 @@ jobs:
           mkdir -p chrondb/lib
           cp ${{ github.workspace }}/target/libchrondb.${{ matrix.lib_ext }} chrondb/lib/
 
-          # Set version
+          # Set version by overwriting VERSION file (pyproject.toml reads from it)
           if [ "$VERSION" != "latest" ]; then
-            sed -i.bak "s/version = \"0.2.0\"/version = \"${VERSION}\"/" pyproject.toml
+            echo "${VERSION}" > ../../VERSION
           else
-            sed -i.bak "s/version = \"0.2.0\"/version = \"0.0.0.dev${RUN_NUMBER}\"/" pyproject.toml
+            echo "0.0.0.dev${RUN_NUMBER}" > ../../VERSION
           fi
-          rm -f pyproject.toml.bak
 
       - name: Build wheel
         working-directory: bindings/python

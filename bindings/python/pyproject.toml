@@ -1,6 +1,6 @@
 [project]
 name = "chrondb"
-version = "0.2.1"
+dynamic = ["version"]
 description = "Python client for ChronDB — a time-traveling key/value database"
 license = { text = "AGPL-3.0" }
 requires-python = ">=3.8"
@@ -8,6 +8,9 @@ requires-python = ">=3.8"
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {file = "../../VERSION"}
 
 [tool.setuptools.packages.find]
 include = ["chrondb*"]
