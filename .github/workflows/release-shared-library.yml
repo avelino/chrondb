@@ -498,8 +498,16 @@ jobs:
       - name: Prepare release assets
         env:
           VERSION: ${{ needs.build-shared-lib.outputs.version }}
+          PRERELEASE: ${{ needs.build-shared-lib.outputs.prerelease }}
         run: |
           mkdir -p release-assets
+
+          # For prerelease builds, use "latest" label so bindings can find the artifact
+          if [ "$PRERELEASE" = "true" ]; then
+            ASSET_VERSION="latest"
+          else
+            ASSET_VERSION="$VERSION"
+          fi
 
           # Package C library tarballs
           for platform in linux-x86_64 macos-aarch64; do
@@ -512,7 +520,7 @@ jobs:
             fi
 
             if [ -d "$ARTIFACT_DIR" ]; then
-              PKG_DIR="libchrondb-${VERSION}-${platform}"
+              PKG_DIR="libchrondb-${ASSET_VERSION}-${platform}"
               mkdir -p "${PKG_DIR}/lib"
               mkdir -p "${PKG_DIR}/include"
 
@@ -522,7 +530,7 @@ jobs:
               cp "${ARTIFACT_DIR}/libchrondb_dynamic.h" "${PKG_DIR}/include/" || true
               cp "${ARTIFACT_DIR}/graal_isolate_dynamic.h" "${PKG_DIR}/include/" || true
 
-              tar -czf "release-assets/libchrondb-${VERSION}-${platform}.tar.gz" "${PKG_DIR}"
+              tar -czf "release-assets/libchrondb-${ASSET_VERSION}-${platform}.tar.gz" "${PKG_DIR}"
             fi
           done
 
