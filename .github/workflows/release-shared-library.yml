@@ -248,6 +248,9 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         working-directory: bindings/python
         run: |
+          # Copy VERSION file into package directory (setuptools blocks parent traversal)
+          cp ../../VERSION VERSION
+
           # Copy generated Python code and UniFFI shared library
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
           cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/_generated/

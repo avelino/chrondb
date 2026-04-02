@@ -1,0 +1,7 @@
+# Copied by CI from repo root (setuptools blocks parent traversal)
+VERSION
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

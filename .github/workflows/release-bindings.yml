@@ -217,6 +217,9 @@ jobs:
           VERSION: ${{ needs.build-native-lib.outputs.version }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
+          # Copy VERSION file into package directory (setuptools blocks parent traversal)
+          cp ../../VERSION VERSION
+
           # Copy generated Python code and UniFFI shared library next to it
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
           cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/_generated/
