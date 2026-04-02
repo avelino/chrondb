@@ -245,11 +245,11 @@ jobs:
       - name: Prepare wheel
         env:
           VERSION: ${{ needs.build-shared-lib.outputs.version }}
-          RUN_NUMBER: ${{ github.run_number }}
         working-directory: bindings/python
         run: |
-          # Copy VERSION file into package directory (setuptools blocks parent traversal)
-          cp ../../VERSION VERSION
+          # Convert SemVer prerelease (0.2.3-dev.22) to PEP 440 (0.2.3.dev22)
+          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\([0-9]*\)/.dev\1/')
+          echo "$PY_VERSION" > VERSION
 
           # Copy generated Python code and UniFFI shared library
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
@@ -472,15 +472,9 @@ jobs:
         working-directory: bindings/rust
         env:
           VERSION: ${{ needs.build-shared-lib.outputs.version }}
-          PRERELEASE: ${{ needs.build-shared-lib.outputs.prerelease }}
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          CRATE_VERSION="$(cat VERSION | tr -d '[:space:]')"
-          if [ "$PRERELEASE" = "true" ]; then
-            CRATE_VERSION="${CRATE_VERSION}-dev.${RUN_NUMBER}"
-          fi
-          sed -i "s/^version = \".*\"/version = \"${CRATE_VERSION}\"/" Cargo.toml
-          echo "Publishing version: ${CRATE_VERSION}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          echo "Publishing version: ${VERSION}"
 
       - name: Publish to crates.io
         working-directory: bindings/rust
