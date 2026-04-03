@@ -9,11 +9,17 @@ Kotlin client for ChronDB, auto-generated from the Rust SDK via [UniFFI](https:/
 
 ## Installation
 
-Add the dependency to your `build.gradle.kts`:
+Download the platform-specific tarball from the [latest GitHub release](https://github.com/avelino/chrondb/releases):
+
+- `chrondb-kotlin-{version}-macos-aarch64.tar.gz` (macOS Apple Silicon)
+- `chrondb-kotlin-{version}-linux-x86_64.tar.gz` (Linux x86_64)
+
+Extract and add as a local dependency:
 
 ```kotlin
+// In your build.gradle.kts
 dependencies {
-    implementation("run.avelino.chrondb:chrondb:0.1.0")
+    implementation(files("path/to/chrondb-kotlin/lib"))
 }
 ```
 

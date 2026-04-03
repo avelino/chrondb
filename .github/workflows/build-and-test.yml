@@ -294,3 +294,87 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target
         run: npm test
+
+  test-swift:
+    needs: [build-native-lib, build-uniffi]
+    runs-on: macos-14
+    name: "Test Swift (UniFFI)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-macOS
+          path: target/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniffi-bindings
+          path: bindings/uniffi/
+
+      - name: Setup Swift package
+        working-directory: bindings/swift
+        run: |
+          cp ../uniffi/generated/chrondb.swift Sources/ChronDB/chrondb_generated.swift
+          cp ../uniffi/generated/chrondbFFI.h Sources/ChronDBFFI/headers/ || true
+          mkdir -p lib
+          cp ../../target/libchrondb.dylib lib/
+          cp ../uniffi/target/release/libchrondb_uniffi.dylib lib/
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Run Swift tests
+        working-directory: bindings/swift
+        env:
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/swift/lib
+        run: swift test
+
+  test-kotlin:
+    needs: [build-native-lib, build-uniffi]
+    runs-on: ubuntu-22.04
+    name: "Test Kotlin (UniFFI)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-Linux
+          path: target/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniffi-bindings
+          path: bindings/uniffi/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Kotlin package
+        working-directory: bindings/kotlin
+        run: |
+          mkdir -p src/main/kotlin/uniffi/chrondb
+          cp ../uniffi/generated/uniffi/chrondb/chrondb.kt src/main/kotlin/uniffi/chrondb/
+          mkdir -p lib
+          cp ../../target/libchrondb.so lib/
+          cp ../uniffi/target/release/libchrondb_uniffi.so lib/
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git config --global init.defaultBranch "main"
+
+      - name: Run Kotlin tests
+        working-directory: bindings/kotlin
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/kotlin/lib
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/bindings/kotlin/lib
+        run: gradle test

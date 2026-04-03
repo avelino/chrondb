@@ -9,10 +9,16 @@ Swift client for ChronDB, auto-generated from the Rust SDK via [UniFFI](https://
 
 ## Installation
 
-Add via Swift Package Manager:
+Download the platform-specific tarball from the [latest GitHub release](https://github.com/avelino/chrondb/releases):
+
+- `chrondb-swift-{version}-macos-aarch64.tar.gz` (macOS Apple Silicon)
+- `chrondb-swift-{version}-linux-x86_64.tar.gz` (Linux x86_64)
+
+Extract and add as a local Swift package dependency:
 
 ```swift
-.package(url: "https://github.com/avelino/chrondb-swift", from: "0.1.0")
+// In your Package.swift
+.package(path: "path/to/chrondb-swift")
 ```
 
 ## Quick Start
