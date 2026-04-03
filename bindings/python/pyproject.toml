@@ -16,7 +16,7 @@ version = {file = "VERSION"}
 include = ["chrondb*"]
 
 [tool.setuptools.package-data]
-chrondb = ["*.so", "*.dylib"]
+chrondb = ["*.so", "*.dylib", "_generated/*.so", "_generated/*.dylib", "lib/*.so", "lib/*.dylib"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,6 @@
+module ChronDBFFI {
+    header "headers/chrondbFFI.h"
+    link "chrondb"
+    link "chrondb_uniffi"
+    export *
+}
