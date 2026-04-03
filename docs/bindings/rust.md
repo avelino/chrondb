@@ -593,6 +593,45 @@ fn main() -> chrondb::Result<()> {
 - Short-lived CLI tools (just use `ChronDB::open`)
 - High-throughput services with constant database access (the isolate would never go idle)
 
+## Export & Backup
+
+### Export to Directory
+
+```rust
+// Export current state to filesystem
+let result = db.export_to_directory("/tmp/export", None)?;
+println!("Exported {} files", result["files_exported"]);
+
+// Export with options
+let opts = serde_json::json!({
+    "branch": "main",
+    "prefix": "users",
+    "format": "json",
+    "decode_paths": true,
+    "overwrite": true
+});
+let result = db.export_to_directory("/tmp/export", Some(&opts.to_string()))?;
+```
+
+### Backup & Restore
+
+```rust
+// Create a full backup
+let result = db.create_backup("/backups/full.tar.gz", None)?;
+println!("Backup at: {}", result["path"]);
+
+// Create a bundle backup
+let opts = r#"{"format":"bundle"}"#;
+let result = db.create_backup("/backups/full.bundle", Some(opts))?;
+
+// Restore from backup
+let result = db.restore_backup("/backups/full.tar.gz", None)?;
+
+// Export/import git bundle snapshots
+let result = db.export_snapshot("/backups/main.bundle", None)?;
+let result = db.import_snapshot("/backups/main.bundle", None)?;
+```
+
 ## Building from Source
 
 ```bash

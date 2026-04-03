@@ -60,5 +60,20 @@ interface ChronDB {
     [Throws=ChronDBError]
     string remote_status();
 
+    [Throws=ChronDBError]
+    string export_to_directory(string target_dir, string? options_json);
+
+    [Throws=ChronDBError]
+    string create_backup(string output_path, string? options_json);
+
+    [Throws=ChronDBError]
+    string restore_backup(string input_path, string? options_json);
+
+    [Throws=ChronDBError]
+    string export_snapshot(string output_path, string? options_json);
+
+    [Throws=ChronDBError]
+    string import_snapshot(string input_path, string? options_json);
+
     string? last_error();
 };

@@ -16,7 +16,8 @@
             [chrondb.util.logging :as log]
             [chrondb.util.locks :as locks]
             [clojure.data.json :as json]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import [java.util.concurrent.atomic AtomicInteger]
            [org.eclipse.jgit.api Git]))
 
@@ -257,6 +258,29 @@
   [db-path]
   (lib-open db-path (derive-index-path db-path)))
 
+;; Lazy-load backup/export functions once, not on every call.
+(defonce ^:private backup-fns
+  (delay
+    (require 'chrondb.backup.core
+             'chrondb.tools.export)
+    {:create-backup   (ns-resolve 'chrondb.backup.core 'create-full-backup)
+     :restore-backup  (ns-resolve 'chrondb.backup.core 'restore-backup)
+     :export-snapshot (ns-resolve 'chrondb.backup.core 'export-snapshot)
+     :import-snapshot (ns-resolve 'chrondb.backup.core 'import-snapshot)
+     :export-dir      (ns-resolve 'chrondb.tools.export 'export-to-directory)}))
+
+(defn- parse-options
+  "Parses a JSON options string into a Clojure map with keyword keys.
+   Converts snake_case keys to kebab-case keywords.
+   Returns empty map if input is nil or empty."
+  [options-json]
+  (if (and options-json (not (.isEmpty ^String options-json)))
+    (let [raw (json/read-str options-json)
+          convert-key (fn [k]
+                        (keyword (str/replace k "_" "-")))]
+      (into {} (map (fn [[k v]] [(convert-key k) v]) raw)))
+    {}))
+
 ;; Lazy-load SQL engine functions once, not on every call.
 (defonce ^:private sql-fns
   (delay
@@ -496,3 +520,97 @@
     (catch Throwable e
       (json/write-str {:type "error"
                        :message (.getMessage e)}))))
+
+;; --- Export & Backup Operations ---
+
+(defn lib-export
+  "Exports the repository tree to a filesystem directory.
+   Options JSON keys: branch, commit, prefix, format (json|raw),
+   decode_paths (bool), overwrite (bool).
+   Returns JSON string with export result or nil on error."
+  [handle target-dir options-json]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [opts (parse-options options-json)
+            opts (cond-> opts
+                   (:format opts) (update :format keyword)
+                   (contains? opts :overwrite) (-> (assoc :overwrite? (:overwrite opts))
+                                                   (dissoc :overwrite))
+                   (contains? opts :decode-paths) (-> (assoc :decode-paths? (:decode-paths opts))
+                                                      (dissoc :decode-paths)))
+            result ((:export-dir @backup-fns) storage target-dir opts)]
+        (json/write-str result)))
+    (catch Throwable e
+      (json/write-str {:type "error" :message (.getMessage e)}))))
+
+(defn lib-create-backup
+  "Creates a full backup of the repository.
+   Options JSON keys: format (tar.gz|bundle), verify (bool), compress (bool).
+   Returns JSON string with backup result or nil on error."
+  [handle output-path options-json]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [opts (parse-options options-json)
+            opts (cond-> opts
+                   (:format opts) (update :format keyword)
+                   (contains? opts :verify) (-> (assoc :verify? (:verify opts))
+                                                (dissoc :verify))
+                   (contains? opts :compress) (-> (assoc :compress? (:compress opts))
+                                                  (dissoc :compress)))
+            result ((:create-backup @backup-fns) storage
+                                                 (assoc opts :output-path output-path))]
+        (json/write-str result)))
+    (catch Throwable e
+      (json/write-str {:type "error" :message (.getMessage e)}))))
+
+(defn lib-restore-backup
+  "Restores the repository from a backup file.
+   Options JSON keys: format (tar.gz|bundle), verify (bool).
+   Returns JSON string with restore result or nil on error."
+  [handle input-path options-json]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [opts (parse-options options-json)
+            opts (cond-> opts
+                   (:format opts) (update :format keyword)
+                   (contains? opts :verify) (-> (assoc :verify? (:verify opts))
+                                                (dissoc :verify)))
+            result ((:restore-backup @backup-fns) storage
+                                                  (assoc opts :input-path input-path))]
+        (json/write-str result)))
+    (catch Throwable e
+      (json/write-str {:type "error" :message (.getMessage e)}))))
+
+(defn lib-export-snapshot
+  "Exports the repository to a git bundle snapshot.
+   Options JSON keys: refs (array of strings), verify (bool).
+   Returns JSON string with snapshot result or nil on error."
+  [handle output-path options-json]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [opts (parse-options options-json)
+            opts (cond-> opts
+                   (contains? opts :verify) (-> (assoc :verify? (:verify opts))
+                                                (dissoc :verify)))
+            result ((:export-snapshot @backup-fns) storage
+                                                   (assoc opts :output output-path))]
+        (json/write-str result)))
+    (catch Throwable e
+      (json/write-str {:type "error" :message (.getMessage e)}))))
+
+(defn lib-import-snapshot
+  "Imports a git bundle snapshot into the repository.
+   Options JSON keys: verify (bool).
+   Returns JSON string with import result or nil on error."
+  [handle input-path options-json]
+  (try
+    (when-let [{:keys [storage]} (get @handle-registry handle)]
+      (let [opts (parse-options options-json)
+            opts (cond-> opts
+                   (contains? opts :verify) (-> (assoc :verify? (:verify opts))
+                                                (dissoc :verify)))
+            result ((:import-snapshot @backup-fns) storage
+                                                   (assoc opts :input input-path))]
+        (json/write-str result)))
+    (catch Throwable e
+      (json/write-str {:type "error" :message (.getMessage e)}))))

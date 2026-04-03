@@ -145,5 +145,15 @@
                    :main-opts ["-m" "cljfmt.main" "check" "src" "test"]}
              :fmt-fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.12.0"}}
                        :main-opts ["-m" "cljfmt.main" "fix" "src" "test"]}
+             :export {:main-opts ["-m" "chrondb.tools.export"]
+                      :doc "Export bare repository tree to filesystem directory.
+                            Usage: clojure -M:export <target-dir> [options]
+                            Options:
+                              --branch BRANCH   Branch to export (default: main)
+                              --commit HASH     Specific commit to export
+                              --prefix PREFIX   Only export paths matching prefix
+                              --format FORMAT   json (pretty, default) or raw
+                              --overwrite       Overwrite existing target directory
+                              --no-decode       Don't decode encoded paths"}
              :codox {:extra-deps {codox/codox {:mvn/version "0.10.8"}}
                      :main-opts ["-m" "chrondb.docs"]}}}

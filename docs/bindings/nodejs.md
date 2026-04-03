@@ -232,3 +232,40 @@ db.put('config:app', { version: '2.0' })
 const entries = db.history('config:app')
 entries.forEach(entry => console.log(entry))
 ```
+
+## Export & Backup
+
+### Export to Directory
+
+```javascript
+// Export current state to filesystem
+const result = db.exportToDirectory('/tmp/export')
+console.log(`Exported ${result.files_exported} files`)
+
+// Export with options
+const result = db.exportToDirectory('/tmp/export', {
+  branch: 'main',
+  prefix: 'users',
+  format: 'json',
+  decodePaths: true,
+  overwrite: true
+})
+```
+
+### Backup & Restore
+
+```javascript
+// Create a full backup
+const result = db.createBackup('/backups/full.tar.gz')
+console.log(`Backup at: ${result.path}`)
+
+// Create a bundle backup
+const result = db.createBackup('/backups/full.bundle', { format: 'bundle' })
+
+// Restore from backup
+const result = db.restoreBackup('/backups/full.tar.gz')
+
+// Export/import git bundle snapshots
+const result = db.exportSnapshot('/backups/main.bundle')
+const result = db.importSnapshot('/backups/main.bundle')
+```

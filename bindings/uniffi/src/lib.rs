@@ -180,6 +180,71 @@ impl ChronDB {
         })
     }
 
+    fn export_to_directory(
+        &self,
+        target_dir: String,
+        options_json: Option<String>,
+    ) -> Result<String, ChronDBError> {
+        let result = self
+            .inner
+            .export_to_directory(&target_dir, options_json.as_deref())?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn create_backup(
+        &self,
+        output_path: String,
+        options_json: Option<String>,
+    ) -> Result<String, ChronDBError> {
+        let result = self
+            .inner
+            .create_backup(&output_path, options_json.as_deref())?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn restore_backup(
+        &self,
+        input_path: String,
+        options_json: Option<String>,
+    ) -> Result<String, ChronDBError> {
+        let result = self
+            .inner
+            .restore_backup(&input_path, options_json.as_deref())?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn export_snapshot(
+        &self,
+        output_path: String,
+        options_json: Option<String>,
+    ) -> Result<String, ChronDBError> {
+        let result = self
+            .inner
+            .export_snapshot(&output_path, options_json.as_deref())?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
+    fn import_snapshot(
+        &self,
+        input_path: String,
+        options_json: Option<String>,
+    ) -> Result<String, ChronDBError> {
+        let result = self
+            .inner
+            .import_snapshot(&input_path, options_json.as_deref())?;
+        serde_json::to_string(&result).map_err(|e| ChronDBError::JsonError {
+            msg: e.to_string(),
+        })
+    }
+
     fn last_error(&self) -> Option<String> {
         self.inner.last_error()
     }

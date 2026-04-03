@@ -215,3 +215,41 @@ db.put("config:app", { version: "2.0" })
 entries = db.history("config:app")
 entries.each { |entry| puts entry }
 ```
+
+## Export & Backup
+
+### Export to Directory
+
+```ruby
+# Export current state to filesystem
+result = db.export_to_directory("/tmp/export")
+puts "Exported #{result['files_exported']} files"
+
+# Export with options
+result = db.export_to_directory(
+  "/tmp/export",
+  branch: "main",
+  prefix: "users",
+  format: "json",
+  decode_paths: true,
+  overwrite: true
+)
+```
+
+### Backup & Restore
+
+```ruby
+# Create a full backup
+result = db.create_backup("/backups/full.tar.gz")
+puts "Backup at: #{result['path']}"
+
+# Create a bundle backup
+result = db.create_backup("/backups/full.bundle", format: "bundle")
+
+# Restore from backup
+result = db.restore_backup("/backups/full.tar.gz")
+
+# Export/import git bundle snapshots
+result = db.export_snapshot("/backups/main.bundle")
+result = db.import_snapshot("/backups/main.bundle")
+```

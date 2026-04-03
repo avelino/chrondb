@@ -37,6 +37,11 @@ public final class ChronDBLib {
     private static IFn libPull;
     private static IFn libFetch;
     private static IFn libRemoteStatus;
+    private static IFn libExport;
+    private static IFn libCreateBackup;
+    private static IFn libRestoreBackup;
+    private static IFn libExportSnapshot;
+    private static IFn libImportSnapshot;
 
     private static synchronized void ensureInitialized() {
         if (!initialized) {
@@ -59,6 +64,11 @@ public final class ChronDBLib {
             libPull = Clojure.var("chrondb.lib.core", "lib-pull");
             libFetch = Clojure.var("chrondb.lib.core", "lib-fetch");
             libRemoteStatus = Clojure.var("chrondb.lib.core", "lib-remote-status");
+            libExport = Clojure.var("chrondb.lib.core", "lib-export");
+            libCreateBackup = Clojure.var("chrondb.lib.core", "lib-create-backup");
+            libRestoreBackup = Clojure.var("chrondb.lib.core", "lib-restore-backup");
+            libExportSnapshot = Clojure.var("chrondb.lib.core", "lib-export-snapshot");
+            libImportSnapshot = Clojure.var("chrondb.lib.core", "lib-import-snapshot");
 
             initialized = true;
         }
@@ -373,6 +383,103 @@ public final class ChronDBLib {
                 return toCString((String) result);
             }
             lastError = ("remote_status returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    // --- Export & Backup ---
+
+    @CEntryPoint(name = "chrondb_export")
+    public static CCharPointer export(IsolateThread thread, int handle,
+                                      CCharPointer targetDir, CCharPointer optionsJson) {
+        try {
+            ensureInitialized();
+            String dir = toJavaString(targetDir);
+            String opts = toJavaString(optionsJson);
+            Object result = libExport.invoke(handle, dir, opts);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("export returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_create_backup")
+    public static CCharPointer createBackup(IsolateThread thread, int handle,
+                                            CCharPointer outputPath, CCharPointer optionsJson) {
+        try {
+            ensureInitialized();
+            String path = toJavaString(outputPath);
+            String opts = toJavaString(optionsJson);
+            Object result = libCreateBackup.invoke(handle, path, opts);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("create_backup returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_restore_backup")
+    public static CCharPointer restoreBackup(IsolateThread thread, int handle,
+                                             CCharPointer inputPath, CCharPointer optionsJson) {
+        try {
+            ensureInitialized();
+            String path = toJavaString(inputPath);
+            String opts = toJavaString(optionsJson);
+            Object result = libRestoreBackup.invoke(handle, path, opts);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("restore_backup returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_export_snapshot")
+    public static CCharPointer exportSnapshot(IsolateThread thread, int handle,
+                                              CCharPointer outputPath, CCharPointer optionsJson) {
+        try {
+            ensureInitialized();
+            String path = toJavaString(outputPath);
+            String opts = toJavaString(optionsJson);
+            Object result = libExportSnapshot.invoke(handle, path, opts);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("export_snapshot returned null");
+            return WordFactory.nullPointer();
+        } catch (Exception e) {
+            lastError = (e.getMessage());
+            return WordFactory.nullPointer();
+        }
+    }
+
+    @CEntryPoint(name = "chrondb_import_snapshot")
+    public static CCharPointer importSnapshot(IsolateThread thread, int handle,
+                                              CCharPointer inputPath, CCharPointer optionsJson) {
+        try {
+            ensureInitialized();
+            String path = toJavaString(inputPath);
+            String opts = toJavaString(optionsJson);
+            Object result = libImportSnapshot.invoke(handle, path, opts);
+            if (result instanceof String) {
+                return toCString((String) result);
+            }
+            lastError = ("import_snapshot returned null");
             return WordFactory.nullPointer();
         } catch (Exception e) {
             lastError = (e.getMessage());

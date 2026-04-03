@@ -112,6 +112,76 @@ impl ChronDB {
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
+    /// Exports the repository tree to a filesystem directory.
+    #[napi]
+    pub fn export_to_directory(
+        &self,
+        target_dir: String,
+        options_json: Option<String>,
+    ) -> Result<String> {
+        let result = self
+            .inner
+            .export_to_directory(&target_dir, options_json.as_deref())
+            .map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    /// Creates a full backup of the repository.
+    #[napi]
+    pub fn create_backup(
+        &self,
+        output_path: String,
+        options_json: Option<String>,
+    ) -> Result<String> {
+        let result = self
+            .inner
+            .create_backup(&output_path, options_json.as_deref())
+            .map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    /// Restores the repository from a backup file.
+    #[napi]
+    pub fn restore_backup(
+        &self,
+        input_path: String,
+        options_json: Option<String>,
+    ) -> Result<String> {
+        let result = self
+            .inner
+            .restore_backup(&input_path, options_json.as_deref())
+            .map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    /// Exports the repository to a git bundle snapshot.
+    #[napi]
+    pub fn export_snapshot(
+        &self,
+        output_path: String,
+        options_json: Option<String>,
+    ) -> Result<String> {
+        let result = self
+            .inner
+            .export_snapshot(&output_path, options_json.as_deref())
+            .map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    /// Imports a git bundle snapshot into the repository.
+    #[napi]
+    pub fn import_snapshot(
+        &self,
+        input_path: String,
+        options_json: Option<String>,
+    ) -> Result<String> {
+        let result = self
+            .inner
+            .import_snapshot(&input_path, options_json.as_deref())
+            .map_err(to_napi_error)?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
     /// Returns the last error message from the native library.
     #[napi]
     pub fn last_error(&self) -> Option<String> {

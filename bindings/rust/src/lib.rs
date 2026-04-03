@@ -118,6 +118,31 @@ enum FfiCommand {
     RemoteStatus {
         reply: Sender<Result<serde_json::Value>>,
     },
+    Export {
+        target_dir: String,
+        options: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    CreateBackup {
+        output_path: String,
+        options: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    RestoreBackup {
+        input_path: String,
+        options: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    ExportSnapshot {
+        output_path: String,
+        options: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
+    ImportSnapshot {
+        input_path: String,
+        options: String,
+        reply: Sender<Result<serde_json::Value>>,
+    },
     Shutdown,
 }
 
@@ -398,6 +423,76 @@ impl FfiWorkerState {
         if result.is_null() {
             return Err(self.last_error_or("remote_status failed"));
         }
+        self.parse_string_result(result)
+    }
+
+    fn handle_export(&self, target_dir: &str, options: &str) -> Result<serde_json::Value> {
+        let c_dir = CString::new(target_dir).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_opts = CString::new(options).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let result = unsafe {
+            (self.lib.chrondb_export)(
+                self.thread, self.handle,
+                c_dir.as_ptr() as *mut c_char,
+                c_opts.as_ptr() as *mut c_char,
+            )
+        };
+        if result.is_null() { return Err(self.last_error_or("export failed")); }
+        self.parse_string_result(result)
+    }
+
+    fn handle_create_backup(&self, output_path: &str, options: &str) -> Result<serde_json::Value> {
+        let c_path = CString::new(output_path).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_opts = CString::new(options).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let result = unsafe {
+            (self.lib.chrondb_create_backup)(
+                self.thread, self.handle,
+                c_path.as_ptr() as *mut c_char,
+                c_opts.as_ptr() as *mut c_char,
+            )
+        };
+        if result.is_null() { return Err(self.last_error_or("create_backup failed")); }
+        self.parse_string_result(result)
+    }
+
+    fn handle_restore_backup(&self, input_path: &str, options: &str) -> Result<serde_json::Value> {
+        let c_path = CString::new(input_path).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_opts = CString::new(options).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let result = unsafe {
+            (self.lib.chrondb_restore_backup)(
+                self.thread, self.handle,
+                c_path.as_ptr() as *mut c_char,
+                c_opts.as_ptr() as *mut c_char,
+            )
+        };
+        if result.is_null() { return Err(self.last_error_or("restore_backup failed")); }
+        self.parse_string_result(result)
+    }
+
+    fn handle_export_snapshot(&self, output_path: &str, options: &str) -> Result<serde_json::Value> {
+        let c_path = CString::new(output_path).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_opts = CString::new(options).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let result = unsafe {
+            (self.lib.chrondb_export_snapshot)(
+                self.thread, self.handle,
+                c_path.as_ptr() as *mut c_char,
+                c_opts.as_ptr() as *mut c_char,
+            )
+        };
+        if result.is_null() { return Err(self.last_error_or("export_snapshot failed")); }
+        self.parse_string_result(result)
+    }
+
+    fn handle_import_snapshot(&self, input_path: &str, options: &str) -> Result<serde_json::Value> {
+        let c_path = CString::new(input_path).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let c_opts = CString::new(options).map_err(|e| ChronDBError::OperationFailed(e.to_string()))?;
+        let result = unsafe {
+            (self.lib.chrondb_import_snapshot)(
+                self.thread, self.handle,
+                c_path.as_ptr() as *mut c_char,
+                c_opts.as_ptr() as *mut c_char,
+            )
+        };
+        if result.is_null() { return Err(self.last_error_or("import_snapshot failed")); }
         self.parse_string_result(result)
     }
 
@@ -754,6 +849,26 @@ impl ChronDB {
                 let result = state.handle_remote_status();
                 let _ = reply.send(result);
             }
+            FfiCommand::Export { target_dir, options, reply } => {
+                let result = state.handle_export(&target_dir, &options);
+                let _ = reply.send(result);
+            }
+            FfiCommand::CreateBackup { output_path, options, reply } => {
+                let result = state.handle_create_backup(&output_path, &options);
+                let _ = reply.send(result);
+            }
+            FfiCommand::RestoreBackup { input_path, options, reply } => {
+                let result = state.handle_restore_backup(&input_path, &options);
+                let _ = reply.send(result);
+            }
+            FfiCommand::ExportSnapshot { output_path, options, reply } => {
+                let result = state.handle_export_snapshot(&output_path, &options);
+                let _ = reply.send(result);
+            }
+            FfiCommand::ImportSnapshot { input_path, options, reply } => {
+                let result = state.handle_import_snapshot(&input_path, &options);
+                let _ = reply.send(result);
+            }
             FfiCommand::Shutdown => return true,
         }
         false
@@ -858,6 +973,11 @@ impl ChronDB {
             FfiCommand::Pull { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::Fetch { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::RemoteStatus { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::Export { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::CreateBackup { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::RestoreBackup { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::ExportSnapshot { reply, .. } => { let _ = reply.send(Err(err)); }
+            FfiCommand::ImportSnapshot { reply, .. } => { let _ = reply.send(Err(err)); }
             FfiCommand::Shutdown => {}
         }
     }
@@ -1120,6 +1240,106 @@ impl ChronDB {
 
         reply_rx
             .recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Exports the repository tree to a filesystem directory.
+    ///
+    /// Returns a JSON value with export metadata including file count.
+    pub fn export_to_directory(
+        &self,
+        target_dir: &str,
+        options_json: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.shared.sender
+            .send(FfiCommand::Export {
+                target_dir: target_dir.to_string(),
+                options: options_json.unwrap_or("{}").to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+        reply_rx.recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Creates a full backup of the repository.
+    ///
+    /// Returns a JSON value with backup metadata (path, checksum).
+    pub fn create_backup(
+        &self,
+        output_path: &str,
+        options_json: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.shared.sender
+            .send(FfiCommand::CreateBackup {
+                output_path: output_path.to_string(),
+                options: options_json.unwrap_or("{}").to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+        reply_rx.recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Restores the repository from a backup file.
+    ///
+    /// Returns a JSON value with restore metadata.
+    pub fn restore_backup(
+        &self,
+        input_path: &str,
+        options_json: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.shared.sender
+            .send(FfiCommand::RestoreBackup {
+                input_path: input_path.to_string(),
+                options: options_json.unwrap_or("{}").to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+        reply_rx.recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Exports the repository to a git bundle snapshot.
+    ///
+    /// Returns a JSON value with snapshot metadata.
+    pub fn export_snapshot(
+        &self,
+        output_path: &str,
+        options_json: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.shared.sender
+            .send(FfiCommand::ExportSnapshot {
+                output_path: output_path.to_string(),
+                options: options_json.unwrap_or("{}").to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+        reply_rx.recv()
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
+    }
+
+    /// Imports a git bundle snapshot into the repository.
+    ///
+    /// Returns a JSON value with import metadata.
+    pub fn import_snapshot(
+        &self,
+        input_path: &str,
+        options_json: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.shared.sender
+            .send(FfiCommand::ImportSnapshot {
+                input_path: input_path.to_string(),
+                options: options_json.unwrap_or("{}").to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?;
+        reply_rx.recv()
             .map_err(|_| ChronDBError::OperationFailed("worker thread died".to_string()))?
     }
 

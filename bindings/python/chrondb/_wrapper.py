@@ -196,3 +196,128 @@ class ChronDB:
             return json.loads(result)
         except _ffi.ChronDbError as e:
             raise _convert_error(e) from e
+
+    # --- Export & Backup ---
+
+    def export_to_directory(self, target_dir: str,
+                            branch: Optional[str] = None,
+                            prefix: Optional[str] = None,
+                            format: str = "json",
+                            decode_paths: bool = True,
+                            overwrite: bool = False) -> Dict[str, Any]:
+        """Export the repository tree to a filesystem directory.
+
+        Args:
+            target_dir: Target directory path.
+            branch: Branch to export (default: main).
+            prefix: Only export paths matching this prefix.
+            format: "json" (pretty-printed, default) or "raw".
+            decode_paths: Decode encoded paths (default: True).
+            overwrite: Overwrite existing target directory (default: False).
+
+        Returns:
+            Export metadata dict with status, files_exported, etc.
+        """
+        try:
+            opts: Dict[str, Any] = {}
+            if branch:
+                opts["branch"] = branch
+            if prefix:
+                opts["prefix"] = prefix
+            if format != "json":
+                opts["format"] = format
+            if not decode_paths:
+                opts["decode_paths"] = False
+            if overwrite:
+                opts["overwrite"] = True
+            result = self._inner.export_to_directory(
+                target_dir, json.dumps(opts) if opts else None)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
+
+    def create_backup(self, output_path: str,
+                      format: str = "tar.gz",
+                      verify: bool = True) -> Dict[str, Any]:
+        """Create a full backup of the repository.
+
+        Args:
+            output_path: Backup file path.
+            format: "tar.gz" (default) or "bundle".
+            verify: Run integrity checks (default: True).
+
+        Returns:
+            Backup metadata dict with status, path, checksum.
+        """
+        try:
+            opts: Dict[str, Any] = {}
+            if format != "tar.gz":
+                opts["format"] = format
+            if not verify:
+                opts["verify"] = False
+            result = self._inner.create_backup(
+                output_path, json.dumps(opts) if opts else None)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
+
+    def restore_backup(self, input_path: str,
+                       format: str = "tar.gz",
+                       verify: bool = True) -> Dict[str, Any]:
+        """Restore the repository from a backup file.
+
+        Args:
+            input_path: Backup file path.
+            format: "tar.gz" (default) or "bundle".
+            verify: Run integrity checks (default: True).
+
+        Returns:
+            Restore metadata dict with status, restore_type.
+        """
+        try:
+            opts: Dict[str, Any] = {}
+            if format != "tar.gz":
+                opts["format"] = format
+            if not verify:
+                opts["verify"] = False
+            result = self._inner.restore_backup(
+                input_path, json.dumps(opts) if opts else None)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
+
+    def export_snapshot(self, output_path: str,
+                        refs: Optional[list] = None) -> Dict[str, Any]:
+        """Export the repository to a git bundle snapshot.
+
+        Args:
+            output_path: Bundle file path.
+            refs: Optional list of refs to include.
+
+        Returns:
+            Snapshot metadata dict.
+        """
+        try:
+            opts: Dict[str, Any] = {}
+            if refs:
+                opts["refs"] = refs
+            result = self._inner.export_snapshot(
+                output_path, json.dumps(opts) if opts else None)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
+
+    def import_snapshot(self, input_path: str) -> Dict[str, Any]:
+        """Import a git bundle snapshot into the repository.
+
+        Args:
+            input_path: Bundle file path.
+
+        Returns:
+            Import metadata dict.
+        """
+        try:
+            result = self._inner.import_snapshot(input_path, None)
+            return json.loads(result)
+        except _ffi.ChronDbError as e:
+            raise _convert_error(e) from e
