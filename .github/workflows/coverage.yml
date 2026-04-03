@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
@@ -11,44 +15,43 @@ jobs:
       JAVA_OPTS: "-XX:+UseG1GC -Xmx3g -Xms1g"
     steps:
       - uses: actions/checkout@v4
-      - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@v1
+
+      - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: "17"
+          java-version: "21"
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Clojure tools
-        uses: DeLaGuardo/setup-clojure@13.4
+
+      - uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: 1.12.3.1577
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Clojure dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: clj-deps-${{ runner.os }}-${{ hashFiles('deps.edn') }}
+          restore-keys: clj-deps-${{ runner.os }}-
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git config --global init.defaultBranch "main"
 
-      # Ensure no Redis processes are running
-      - name: Check for running processes
+      - name: Kill conflicting processes
         run: |
-          echo "Checking for any running Redis processes..."
-          ps aux | grep redis || true
-          echo "Checking for any Java processes..."
-          ps aux | grep java || true
-          echo "Checking for port 6380 usage..."
-          netstat -tulpn | grep 6380 || true
-          echo "Killing any potential conflicting processes..."
           pkill -f "redis" || true
           pkill -f "java.*chrondb" || true
-          sleep 3
+          sleep 2
 
-      # Run coverage excluding Redis tests
-      - name: Run coverage (pr-only skip backup ns)
+      - name: Run coverage (PR — skip external protocols)
         if: github.event_name == 'pull_request'
-        run: |
-          clojure -M:coverage-non-external-protocol
+        run: clojure -M:coverage-non-external-protocol
 
-      - name: Run coverage (main with backup ns)
+      - name: Run coverage (main — full)
         if: github.event_name != 'pull_request'
-        run: |
-          clojure -M:coverage
+        run: clojure -M:coverage

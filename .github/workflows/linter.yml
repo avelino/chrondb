@@ -1,16 +1,20 @@
-name: Lint project with clj-kondo
+name: Lint
 
 on: [push, pull_request]
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
     steps:
-    - uses: actions/checkout@v4
-    - uses: DeLaGuardo/setup-clj-kondo@v1
-      with:
-        version: '2024.11.14'
-    - name: Run clj-kondo
-      run: clj-kondo --lint src test
+      - uses: actions/checkout@v4
+
+      - uses: DeLaGuardo/setup-clj-kondo@v1
+        with:
+          version: '2024.11.14'
+
+      - name: Run clj-kondo
+        run: clj-kondo --lint src test
