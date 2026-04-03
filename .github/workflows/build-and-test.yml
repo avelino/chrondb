@@ -1,17 +1,23 @@
-name: Build Language Bindings
+name: Build & Test Bindings
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - "bindings/**"
       - "java/**"
       - "src/chrondb/lib/**"
+      - "bindings/**"
+      - "dev/chrondb/shared_library.clj"
   pull_request:
     paths:
-      - "bindings/**"
       - "java/**"
       - "src/chrondb/lib/**"
+      - "bindings/**"
+      - "dev/chrondb/shared_library.clj"
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-native-lib:
@@ -33,6 +39,15 @@ jobs:
           java-version: "21"
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Clojure dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: clj-deps-${{ runner.os }}-${{ hashFiles('deps.edn') }}
+          restore-keys: clj-deps-${{ runner.os }}-
 
       - name: Build shared library
         run: |
@@ -63,6 +78,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bindings/rust/target
+          key: cargo-rust-${{ hashFiles('bindings/rust/Cargo.lock', 'bindings/rust/Cargo.toml') }}
+          restore-keys: cargo-rust-
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
@@ -89,6 +114,16 @@ jobs:
           path: target/
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bindings/uniffi/target
+          key: cargo-uniffi-${{ hashFiles('bindings/uniffi/Cargo.lock', 'bindings/uniffi/Cargo.toml') }}
+          restore-keys: cargo-uniffi-
 
       - name: Build UniFFI cdylib
         working-directory: bindings/uniffi
@@ -136,17 +171,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('bindings/python/requirements*.txt', 'bindings/python/pyproject.toml') }}
+          restore-keys: pip-
+
       - name: Install dependencies
         run: pip install pytest
 
       - name: Setup Python package
         working-directory: bindings/python
         run: |
-          # Copy generated code
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
-          # Copy shared libraries next to generated code (where UniFFI looks)
           cp ../uniffi/target/release/libchrondb_uniffi.so chrondb/_generated/
-          # Also copy libchrondb.so (GraalVM core) to a discoverable path
           mkdir -p chrondb/lib
           cp ${{ github.workspace }}/target/libchrondb.so chrondb/lib/
 
@@ -163,7 +202,7 @@ jobs:
           CHRONDB_LIB_DIR: ${{ github.workspace }}/bindings/python/chrondb/lib
         run: pytest tests/ -v
 
-  test-ruby-uniffi:
+  test-ruby:
     needs: [build-native-lib, build-uniffi]
     runs-on: ubuntu-22.04
     name: "Test Ruby (UniFFI)"
@@ -224,6 +263,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Cache Cargo and npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bindings/node/target
+            bindings/node/node_modules
+          key: node-${{ hashFiles('bindings/node/Cargo.lock', 'bindings/node/package.json') }}
+          restore-keys: node-
 
       - name: Configure Git
         run: |

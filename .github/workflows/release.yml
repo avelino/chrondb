@@ -1,14 +1,20 @@
-name: Release Language Bindings
+name: Release
 
 on:
   push:
     branches: [main]
     tags: ['v*']
     paths:
-      - "bindings/**"
       - "java/**"
       - "src/chrondb/lib/**"
+      - "bindings/**"
+      - "dev/chrondb/shared_library.clj"
+      - "VERSION"
   workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-native-lib:
@@ -38,7 +44,8 @@ jobs:
             PRERELEASE=false
           else
             FILE_VERSION="$(cat VERSION | tr -d '[:space:]')"
-            VERSION="${FILE_VERSION}-dev.${GITHUB_RUN_NUMBER}"
+            SHORT_SHA="${GITHUB_SHA::7}"
+            VERSION="${FILE_VERSION}-dev.${SHORT_SHA}"
             RELEASE_TAG="latest"
             PRERELEASE=true
           fi
@@ -68,10 +75,22 @@ jobs:
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache Clojure dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: clj-deps-${{ runner.os }}-${{ hashFiles('deps.edn') }}
+          restore-keys: clj-deps-${{ runner.os }}-
+
       - name: Build shared library
         run: |
           clojure -M:shared-lib
           native-image @target/shared-image-args
+
+      - name: List output files
+        run: ls -la target/libchrondb* target/graal_isolate* || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -82,6 +101,94 @@ jobs:
             target/graal_isolate_dynamic.h
             target/libchrondb.h
             target/libchrondb_dynamic.h
+
+  # --- Rust ---
+
+  package-rust:
+    needs: build-native-lib
+    runs-on: ${{ matrix.os }}
+    name: "Package Rust binding on ${{ matrix.os }}"
+    strategy:
+      matrix:
+        os: ["macos-14", "ubuntu-22.04"]
+        include:
+          - os: macos-14
+            arch: aarch64
+          - os: ubuntu-22.04
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
+          path: target/
+
+      - name: Determine platform and extension
+        id: platform
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "ext=dylib" >> $GITHUB_OUTPUT
+            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          else
+            echo "ext=so" >> $GITHUB_OUTPUT
+            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Rust tarball
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          PLATFORM="${{ steps.platform.outputs.name }}"
+          EXT="${{ steps.platform.outputs.ext }}"
+          PKG_DIR="chrondb-rust-${VERSION}-${PLATFORM}"
+
+          mkdir -p "${PKG_DIR}/lib"
+          mkdir -p "${PKG_DIR}/include"
+          mkdir -p "${PKG_DIR}/src"
+
+          cp target/libchrondb.${EXT} "${PKG_DIR}/lib/"
+          cp target/libchrondb.h "${PKG_DIR}/include/"
+          cp target/graal_isolate.h "${PKG_DIR}/include/"
+          cp target/libchrondb_dynamic.h "${PKG_DIR}/include/" || true
+          cp target/graal_isolate_dynamic.h "${PKG_DIR}/include/" || true
+
+          cp -r bindings/rust/src/* "${PKG_DIR}/src/"
+          cp bindings/rust/Cargo.toml "${PKG_DIR}/"
+          cp bindings/rust/build.rs "${PKG_DIR}/"
+
+          tar -czf "chrondb-rust-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrondb-rust-${{ steps.platform.outputs.name }}
+          path: chrondb-rust-*.tar.gz
+
+  publish-rust:
+    needs: [build-native-lib, package-rust]
+    runs-on: ubuntu-22.04
+    name: "Publish Rust crate to crates.io"
+    environment: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Update crate version
+        working-directory: bindings/rust
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          echo "Publishing version: ${VERSION}"
+
+      - name: Publish to crates.io
+        working-directory: bindings/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --allow-dirty
+
+  # --- UniFFI (generates Python/Ruby/Kotlin/Swift) ---
 
   build-uniffi:
     needs: build-native-lib
@@ -107,13 +214,23 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bindings/uniffi/target
+          key: cargo-uniffi-release-${{ runner.os }}-${{ hashFiles('bindings/uniffi/Cargo.lock', 'bindings/uniffi/Cargo.toml') }}
+          restore-keys: cargo-uniffi-release-${{ runner.os }}-
+
       - name: Build UniFFI cdylib
         working-directory: bindings/uniffi
         env:
           CHRONDB_LIB_DIR: ${{ github.workspace }}/target
         run: cargo build --release
 
-      - name: Generate bindings
+      - name: Generate bindings for all languages
         working-directory: bindings/uniffi
         run: |
           mkdir -p generated
@@ -132,48 +249,7 @@ jobs:
             bindings/uniffi/generated/
             bindings/uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }}
 
-  build-node:
-    needs: build-native-lib
-    runs-on: ${{ matrix.os }}
-    name: "Build Node.js on ${{ matrix.os }}"
-    strategy:
-      matrix:
-        os: ["macos-14", "ubuntu-22.04"]
-        include:
-          - os: macos-14
-            arch: aarch64
-          - os: ubuntu-22.04
-            arch: x86_64
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
-          path: target/
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Build Node.js native addon
-        working-directory: bindings/node
-        env:
-          CHRONDB_LIB_DIR: ${{ github.workspace }}/target
-        run: |
-          npm install
-          npx napi build --release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: node-${{ runner.os }}-${{ matrix.arch }}
-          path: |
-            bindings/node/chrondb.*.node
-            bindings/node/index.js
-            bindings/node/index.d.ts
-            bindings/node/package.json
+  # --- Python ---
 
   package-python:
     needs: [build-native-lib, build-uniffi]
@@ -211,37 +287,83 @@ jobs:
       - name: Install build tools
         run: pip install build wheel
 
-      - name: Prepare package
-        working-directory: bindings/python
+      - name: Determine platform
+        id: platform
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare wheel
         env:
           VERSION: ${{ needs.build-native-lib.outputs.version }}
+        working-directory: bindings/python
         run: |
-          # Convert SemVer prerelease (0.2.3-dev.22) to PEP 440 (0.2.3.dev22)
-          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\([0-9]*\)/.dev\1/')
+          # Convert SemVer prerelease (0.2.3-dev.abc1234) to PEP 440 (0.2.3.devabc1234)
+          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\(.*\)/.dev\1/')
           echo "$PY_VERSION" > VERSION
 
-          # Copy generated Python code and UniFFI shared library next to it
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
           cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/_generated/
 
-          # Bundle GraalVM core library
           mkdir -p chrondb/lib
-          cp ${{ github.workspace }}/target/libchrondb.${{ matrix.lib_ext }} chrondb/lib/
+          cp ../../target/libchrondb.${{ matrix.lib_ext }} chrondb/lib/
 
       - name: Build wheel
         working-directory: bindings/python
         run: python -m build --wheel
 
       - name: Retag wheel with platform
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
         working-directory: bindings/python
         run: |
+          WHEEL_TAG="${{ matrix.wheel_tag }}"
           cd dist
-          wheel tags --remove --platform-tag "${{ matrix.wheel_tag }}" *.whl
+          wheel tags --remove --platform-tag "${WHEEL_TAG}" *.whl
+
+          if [ "$VERSION" = "latest" ]; then
+            RETAGGED=$(ls *.whl)
+            cp "$RETAGGED" "chrondb-latest-py3-none-${WHEEL_TAG}.whl"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: python-wheel-${{ matrix.arch }}
-          path: bindings/python/dist/*.whl
+          name: chrondb-python-${{ steps.platform.outputs.name }}
+          path: bindings/python/dist/chrondb-*.whl
+
+  publish-python:
+    needs: [build-native-lib, package-python]
+    runs-on: ubuntu-22.04
+    name: "Publish Python to PyPI"
+    environment: tests
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chrondb-python-*
+          path: dist/
+          merge-multiple: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install twine
+        run: pip install twine
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          rm -f dist/chrondb-latest-*.whl
+          twine upload dist/*.whl
+
+  # --- Ruby ---
 
   package-ruby:
     needs: [build-native-lib, build-uniffi]
@@ -254,11 +376,9 @@ jobs:
           - os: macos-14
             arch: aarch64
             lib_ext: dylib
-            gem_platform: arm64-darwin
           - os: ubuntu-22.04
             arch: x86_64
             lib_ext: so
-            gem_platform: x86_64-linux
     steps:
       - uses: actions/checkout@v4
 
@@ -279,9 +399,8 @@ jobs:
       - name: Prepare gem
         working-directory: bindings/ruby
         run: |
-          # Copy generated Ruby code and native libraries
           cp ../uniffi/generated/chrondb.rb lib/chrondb_generated.rb
-          cp ${{ github.workspace }}/target/libchrondb.${{ matrix.lib_ext }} lib/
+          cp ../../target/libchrondb.${{ matrix.lib_ext }} lib/
           cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} lib/
 
       - name: Build gem
@@ -290,13 +409,39 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ruby-gem-${{ matrix.arch }}
+          name: chrondb-ruby-${{ matrix.arch }}
           path: bindings/ruby/*.gem
 
-  package-node:
-    needs: [build-native-lib, build-node]
+  publish-ruby:
+    needs: [build-native-lib, package-ruby]
+    runs-on: ubuntu-22.04
+    name: "Publish Ruby gem"
+    environment: tests
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chrondb-ruby-*
+          path: gems/
+          merge-multiple: true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Publish to RubyGems
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          for gem in gems/*.gem; do
+            gem push "$gem" || true
+          done
+
+  # --- Node.js ---
+
+  build-node:
+    needs: build-native-lib
     runs-on: ${{ matrix.os }}
-    name: "Package Node.js on ${{ matrix.os }}"
+    name: "Build Node.js on ${{ matrix.os }}"
     strategy:
       matrix:
         os: ["macos-14", "ubuntu-22.04"]
@@ -315,14 +460,19 @@ jobs:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: node-${{ runner.os }}-${{ matrix.arch }}
-          path: bindings/node/
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Build native addon
+        working-directory: bindings/node
+        env:
+          CHRONDB_LIB_DIR: ${{ github.workspace }}/target
+        run: |
+          npm install
+          npx napi build --release
 
       - name: Bundle native library
         working-directory: bindings/node
@@ -336,69 +486,18 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: node-npm-${{ matrix.arch }}
+          name: chrondb-node-${{ matrix.arch }}
           path: bindings/node/*.tgz
 
-  publish-python:
-    needs: [build-native-lib, package-python]
-    runs-on: ubuntu-22.04
-    name: "Publish Python to PyPI"
-    environment: tests
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: python-wheel-*
-          path: dist/
-          merge-multiple: true
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install twine
-        run: pip install twine
-
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: twine upload dist/*.whl
-
-  publish-ruby:
-    needs: [build-native-lib, package-ruby]
-    runs-on: ubuntu-22.04
-    name: "Publish Ruby gem"
-    environment: tests
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ruby-gem-*
-          path: gems/
-          merge-multiple: true
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-
-      - name: Publish to RubyGems
-        env:
-          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-        run: |
-          for gem in gems/*.gem; do
-            gem push "$gem" || true
-          done
-
   publish-node:
-    needs: [build-native-lib, package-node]
+    needs: [build-native-lib, build-node]
     runs-on: ubuntu-22.04
     name: "Publish Node.js to npm"
     environment: tests
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: node-npm-*
+          pattern: chrondb-node-*
           path: packages/
           merge-multiple: true
 
@@ -415,31 +514,10 @@ jobs:
             npm publish "$pkg" --access public || true
           done
 
-  publish-rust:
-    needs: build-native-lib
-    runs-on: ubuntu-22.04
-    name: "Publish Rust crate to crates.io"
-    environment: tests
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Update crate version
-        working-directory: bindings/rust
-        env:
-          VERSION: ${{ needs.build-native-lib.outputs.version }}
-        run: |
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
-
-      - name: Publish to crates.io
-        working-directory: bindings/rust
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
+  # --- GitHub Release ---
 
   create-release:
-    needs: [build-native-lib, package-python, package-ruby, package-node]
+    needs: [build-native-lib, package-rust, package-python, package-ruby, build-node]
     runs-on: ubuntu-22.04
     name: "Create GitHub Release"
     permissions:
@@ -458,27 +536,52 @@ jobs:
         run: |
           mkdir -p release-assets
 
-          # For prerelease builds, use "latest" label so bindings can find the artifact
           if [ "$PRERELEASE" = "true" ]; then
             ASSET_VERSION="latest"
           else
             ASSET_VERSION="$VERSION"
           fi
 
-          # Native library tarballs
-          for dir in artifacts/libchrondb-*; do
-            platform=$(basename "$dir" | sed 's/libchrondb-//')
-            tar -czf "release-assets/libchrondb-${ASSET_VERSION}-${platform}.tar.gz" -C "$dir" .
+          # Package C library tarballs
+          for platform in linux-x86_64 macos-aarch64; do
+            if [ "$platform" = "linux-x86_64" ]; then
+              ARTIFACT_DIR="artifacts/libchrondb-Linux-x86_64"
+              LIB_FILE="libchrondb.so"
+            else
+              ARTIFACT_DIR="artifacts/libchrondb-macOS-aarch64"
+              LIB_FILE="libchrondb.dylib"
+            fi
+
+            if [ -d "$ARTIFACT_DIR" ]; then
+              PKG_DIR="libchrondb-${ASSET_VERSION}-${platform}"
+              mkdir -p "${PKG_DIR}/lib"
+              mkdir -p "${PKG_DIR}/include"
+
+              cp "${ARTIFACT_DIR}/${LIB_FILE}" "${PKG_DIR}/lib/" || true
+              cp "${ARTIFACT_DIR}/libchrondb.h" "${PKG_DIR}/include/" || true
+              cp "${ARTIFACT_DIR}/graal_isolate.h" "${PKG_DIR}/include/" || true
+              cp "${ARTIFACT_DIR}/libchrondb_dynamic.h" "${PKG_DIR}/include/" || true
+              cp "${ARTIFACT_DIR}/graal_isolate_dynamic.h" "${PKG_DIR}/include/" || true
+
+              tar -czf "release-assets/libchrondb-${ASSET_VERSION}-${platform}.tar.gz" "${PKG_DIR}"
+            fi
           done
 
-          # Python wheels
-          cp artifacts/python-wheel-*/*.whl release-assets/ || true
+          # Move Rust tarballs
+          cp artifacts/chrondb-rust-*/*.tar.gz release-assets/ || true
 
-          # Ruby gems
-          cp artifacts/ruby-gem-*/*.gem release-assets/ || true
+          # Move Python wheels
+          if [ "$VERSION" = "latest" ]; then
+            cp artifacts/chrondb-python-*/chrondb-latest-*.whl release-assets/ || true
+          else
+            cp artifacts/chrondb-python-*/chrondb-${VERSION}-*.whl release-assets/ || true
+          fi
 
-          # Node.js tarballs
-          cp artifacts/node-npm-*/*.tgz release-assets/ || true
+          # Move Ruby gems
+          cp artifacts/chrondb-ruby-*/*.gem release-assets/ || true
+
+          # Move Node.js tarballs
+          cp artifacts/chrondb-node-*/*.tgz release-assets/ || true
 
           echo "Release assets:"
           ls -la release-assets/

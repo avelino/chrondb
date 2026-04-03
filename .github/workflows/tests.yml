@@ -4,48 +4,53 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@v1
+
+      - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: "17"
+          java-version: "21"
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install Clojure tools
-        uses: DeLaGuardo/setup-clojure@12.1
+
+      - uses: DeLaGuardo/setup-clojure@13.4
         with:
-          cli: latest
+          cli: 1.12.3.1577
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Clojure dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: clj-deps-${{ runner.os }}-${{ hashFiles('deps.edn') }}
+          restore-keys: clj-deps-${{ runner.os }}-
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git config --global init.defaultBranch "main"
 
-      # Ensure no Redis processes are running
-      - name: Check for running processes
+      - name: Kill conflicting processes
         run: |
-          echo "Checking for any running Redis processes..."
-          ps aux | grep redis || true
-          echo "Checking for any Java processes..."
-          ps aux | grep java || true
-          echo "Checking for port 6380 usage..."
-          netstat -tulpn | grep 6380 || true
-          echo "Killing any potential conflicting processes..."
           pkill -f "redis" || true
           pkill -f "java.*chrondb" || true
-          sleep 3
+          sleep 2
 
       - name: Run non external protocol tests
         run: clojure -M:test-non-external-protocol
 
-      # Run all SQL tests sequentially with proper cleanup between them
       - name: Run SQL tests
         run: clojure -M:test-sql-only
 
-      # Run all Redis tests sequentially with proper cleanup between them
       - name: Run Redis tests sequentially
         run: clojure -M:test-redis-sequential
