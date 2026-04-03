@@ -3,7 +3,6 @@
 _Chronological **key/value** Database built on Git architecture with complete version history._
 
 [![GitHub License](https://img.shields.io/github/license/avelino/chrondb)](https://github.com/avelino/chrondb/blob/main/LICENSE)
-[![Discord](https://img.shields.io/discord/1099017682487087116?label=discord)](https://discord.gg/w3Rnafyc)
 [![Documentation](https://img.shields.io/badge/docs-chrondb.avelino.run-blue)](https://chrondb.avelino.run/)
 
 ## ✨ Features
