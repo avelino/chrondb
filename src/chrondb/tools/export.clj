@@ -25,10 +25,22 @@
 
 (defn- decode-export-path
   "Decodes an encoded Git path back to a human-readable form.
-   Splits path into segments and decodes each one."
+   Splits path into segments, decodes each one, and rejects
+   unsafe paths that could escape the export target directory."
   [git-path]
-  (let [segments (str/split git-path #"/")]
-    (str/join "/" (map path/decode-path segments))))
+  (let [segments (str/split git-path #"/")
+        decoded (mapv (fn [segment]
+                        (let [d (path/decode-path segment)]
+                          (when (or (= ".." d)
+                                    (str/starts-with? d "/")
+                                    (str/starts-with? d "\\")
+                                    (re-matches #"^[A-Za-z]:.*" d))
+                            (throw (ex-info "Unsafe export path detected"
+                                            {:git-path git-path
+                                             :decoded-segment d})))
+                          d))
+                      segments)]
+    (str/join "/" decoded)))
 
 (defn- pretty-json-bytes
   "Parses JSON content and re-serializes with indentation.
@@ -54,16 +66,23 @@
 
 (defn- validate-target-dir
   "Validates the target directory. Creates it if needed.
-   Fails if non-empty and overwrite? is false."
+   Fails if path exists but is not a directory, or if non-empty without overwrite."
   [target-dir overwrite?]
   (let [dir (io/file target-dir)]
-    (when (.exists dir)
-      (when (and (not overwrite?)
-                 (.isDirectory dir)
-                 (pos? (count (.listFiles dir))))
-        (throw (ex-info "Target directory is not empty. Use :overwrite? true to overwrite."
-                        {:target-dir target-dir}))))
-    (.mkdirs dir)))
+    (if (.exists dir)
+      (do
+        (when-not (.isDirectory dir)
+          (throw (ex-info "Target path exists but is not a directory."
+                          {:target-dir target-dir})))
+        (let [files (.listFiles dir)]
+          (when (and (not overwrite?)
+                     files
+                     (pos? (count files)))
+            (throw (ex-info "Target directory is not empty. Use :overwrite? true to overwrite."
+                            {:target-dir target-dir})))))
+      (when-not (.mkdirs dir)
+        (throw (ex-info "Failed to create target directory."
+                        {:target-dir target-dir}))))))
 
 (defn export-to-directory
   "Exports the current state of a branch to a filesystem directory.

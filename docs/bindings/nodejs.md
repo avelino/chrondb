@@ -256,16 +256,16 @@ const result = db.exportToDirectory('/tmp/export', {
 
 ```javascript
 // Create a full backup
-const result = db.createBackup('/backups/full.tar.gz')
+let result = db.createBackup('/backups/full.tar.gz')
 console.log(`Backup at: ${result.path}`)
 
 // Create a bundle backup
-const result = db.createBackup('/backups/full.bundle', { format: 'bundle' })
+result = db.createBackup('/backups/full.bundle', { format: 'bundle' })
 
 // Restore from backup
-const result = db.restoreBackup('/backups/full.tar.gz')
+result = db.restoreBackup('/backups/full.tar.gz')
 
 // Export/import git bundle snapshots
-const result = db.exportSnapshot('/backups/main.bundle')
-const result = db.importSnapshot('/backups/main.bundle')
+result = db.exportSnapshot('/backups/main.bundle')
+result = db.importSnapshot('/backups/main.bundle')
 ```
