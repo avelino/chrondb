@@ -1,10 +1,16 @@
 name: Lint
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CLJ_KONDO_VERSION: "2024.11.14"
 
 jobs:
   lint:
@@ -12,9 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: DeLaGuardo/setup-clj-kondo@v1
-        with:
-          version: '2024.11.14'
+      - name: Install clj-kondo
+        run: |
+          curl -sLO "https://github.com/clj-kondo/clj-kondo/releases/download/v${CLJ_KONDO_VERSION}/clj-kondo-${CLJ_KONDO_VERSION}-linux-amd64.zip"
+          unzip -o "clj-kondo-${CLJ_KONDO_VERSION}-linux-amd64.zip" -d /usr/local/bin
+          rm "clj-kondo-${CLJ_KONDO_VERSION}-linux-amd64.zip"
+          clj-kondo --version
 
       - name: Run clj-kondo
         run: clj-kondo --lint src test
