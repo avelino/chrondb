@@ -13,7 +13,7 @@ ChronDB is a **chronological key/value database** implemented in Clojure, backed
 - **Multi-protocol**: REST API, Redis RESP protocol, PostgreSQL wire protocol
 - **Time-travel**: Query any point in history via commit selection
 - **Branching**: Isolated environments via Git branches
-- **FFI bindings**: Python and Rust clients via GraalVM native-image shared library
+- **FFI bindings**: Python, Rust, Node.js, and Ruby clients via GraalVM native-image shared library (UniFFI + NAPI-RS)
 
 ### Conceptual Mapping
 
@@ -98,30 +98,50 @@ chrondb/
 │   │   └── locks.clj         # Lock cleanup
 │   ├── tools/                # Developer tools
 │   │   ├── diagnose.clj      # Repository diagnostics
-│   │   ├── dump.clj          # Data export
+│   │   ├── dump.clj          # Data dump (stdout)
+│   │   ├── export.clj        # Bare repo → filesystem export
 │   │   └── migrator.clj      # Data migration
 │   └── lib/                  # FFI entry points
 │       └── core.clj          # Native library exports
-├── test/                     # Test suite (61 files)
+├── test/                     # Test suite
 │   └── chrondb/
 │       ├── storage/git/      # Storage integration tests
 │       ├── api/              # Protocol tests
 │       ├── transaction/      # Transaction tests
 │       ├── wal/              # WAL recovery tests
 │       ├── query/            # AST tests
+│       ├── backup/           # Backup/restore tests
+│       ├── index/            # Lucene index tests
+│       ├── lib/              # FFI bridge tests
+│       ├── tools/            # Export tool tests
+│       ├── validation/       # Schema validation tests
+│       ├── concurrency/      # OCC tests
+│       ├── temporal/         # Time-travel tests
 │       └── benchmark/        # Performance benchmarks
 ├── bindings/                 # Language bindings (FFI)
-│   ├── python/               # Python client (ctypes)
+│   ├── rust/                 # Rust core client (all others depend on this)
+│   │   ├── src/
+│   │   │   ├── lib.rs        # Safe wrapper + worker thread
+│   │   │   ├── ffi.rs        # Dynamic FFI symbol loading
+│   │   │   └── setup.rs      # Library auto-download
+│   │   └── Cargo.toml
+│   ├── uniffi/               # UniFFI bridge (generates Python/Ruby/Kotlin/Swift)
+│   │   ├── src/
+│   │   │   ├── chrondb.udl   # Interface definition
+│   │   │   └── lib.rs        # Rust implementation
+│   │   └── Cargo.toml
+│   ├── python/               # Python client (UniFFI-generated + wrapper)
 │   │   ├── chrondb/
-│   │   │   ├── client.py     # High-level API
-│   │   │   └── _ffi.py       # FFI loader
+│   │   │   ├── _wrapper.py   # High-level dict-based API
+│   │   │   └── _generated/   # UniFFI auto-generated
 │   │   └── tests/
-│   └── rust/                 # Rust client
-│       ├── src/
-│       │   ├── lib.rs        # Safe wrapper
-│       │   ├── ffi.rs        # FFI definitions
-│       │   └── setup.rs      # Library setup
-│       └── Cargo.toml
+│   ├── ruby/                 # Ruby client (UniFFI-generated + wrapper)
+│   │   ├── lib/chrondb.rb    # High-level API
+│   │   └── test/
+│   └── node/                 # Node.js client (NAPI-RS)
+│       ├── src/lib.rs        # NAPI-RS Rust implementation
+│       ├── index.js          # JS wrapper
+│       └── index.d.ts        # TypeScript definitions
 ├── dev/                      # Build tooling
 │   └── chrondb/
 │       ├── build.clj         # Uberjar builder
@@ -132,6 +152,8 @@ chrondb/
 ├── docs/                     # Documentation
 ├── deps.edn                  # Clojure dependencies
 ├── config.example.edn        # Configuration template
+├── docker-compose.yml        # Multi-service Docker setup
+├── CONTRIBUTING.md           # Contributor guidelines
 └── Dockerfile                # Multi-stage Docker build
 ```
 
@@ -202,12 +224,14 @@ All protocols share the same storage/index backend:
 
 ### FFI Bindings
 
-Both Python and Rust use a **shared isolate pattern** to avoid GraalVM file lock conflicts:
+All bindings (Python, Rust, Ruby, Node.js) use a **shared isolate pattern** to avoid GraalVM file lock conflicts:
 
 - Global registry keyed by `(data_path, index_path)`
 - Multiple instances → single isolate, thread-safe
 - Reference counting for cleanup
 - **64MB stack** for Rust FFI worker (Lucene/JGit deep call chains)
+- **UniFFI** generates Python, Ruby, Kotlin, Swift from a single UDL definition
+- **NAPI-RS** generates Node.js native module from Rust
 
 ## Code Style & Conventions
 
@@ -285,6 +309,16 @@ clojure -M:benchmark
 clojure -M:lint      # clj-kondo
 clojure -M:fmt       # Check formatting
 clojure -M:fmt-fix   # Fix formatting
+```
+
+### Export Tool
+
+```bash
+# Export bare repo to filesystem directory
+clojure -M:export /tmp/chrondb-export
+
+# Export with options
+clojure -M:export /tmp/chrondb-export --branch main --prefix users --format json
 ```
 
 ### Building
@@ -461,11 +495,16 @@ Each language binding (Python, Rust, etc.) **MUST** implement a robust wrapper l
 
 ### Implementing a New Binding
 
+**Preferred path**: Add to UniFFI UDL (`bindings/uniffi/src/chrondb.udl`) — generates
+Python, Ruby, Kotlin, Swift automatically from a single interface definition.
+
+**Alternative**: Use NAPI-RS (Node.js) or direct FFI for languages not supported by UniFFI.
+
 When creating a binding for a new language:
 
-1. **Start with lifecycle management** - ensure resources are always cleaned up
-2. **Implement shared isolate registry** - keyed by `(data_path, index_path)`
-3. **Add signal handlers** - graceful shutdown on SIGTERM/SIGINT
+1. **Add method to UDL** if using UniFFI, or implement directly against `chrondb` Rust crate
+2. **Implement language wrapper** — idiomatic API on top of generated FFI code
+3. **Start with lifecycle management** - ensure resources are always cleaned up
 4. **Wrap all FFI calls** - add timeouts, error translation, logging
 5. **Test crash scenarios** - kill -9, out of memory, disk full
 6. **Test concurrent access** - multiple processes, same database path
@@ -487,33 +526,67 @@ native-image @target/shared-image-args -H:Name=libchrondb
 ```python
 from chrondb import ChronDB
 
-with ChronDB(data_path="./data", index_path="./index") as db:
-    db.put("users/1", {"name": "Alice"})
-    user = db.get("users/1")
-    history = db.history("users/1")
+with ChronDB("/tmp/mydb") as db:
+    db.put("users:1", {"name": "Alice"})
+    user = db.get("users:1")
+    db.export_to_directory("/tmp/export", branch="main")
+    db.create_backup("/backups/full.tar.gz")
 ```
 
 Key implementation details:
-- Shared isolate registry: `_isolate_registry` keyed by paths
-- Reference counting: `add_ref()`, `release()`
-- Auto library discovery: `~/.chrondb/lib/` or `CHRONDB_LIB_PATH`
+- UniFFI-generated `_generated/chrondb.py` + hand-written `_wrapper.py`
+- Dict-based API (JSON serialization handled internally)
+- Context manager support
 
 ### Rust Bindings
 
 ```rust
 use chrondb::ChronDB;
 
-let db = ChronDB::open("./data", "./index")?;
-db.put("users/1", serde_json::json!({"name": "Alice"}))?;
-let user = db.get("users/1")?;
-let history = db.history("users/1")?;
+let db = ChronDB::open_path("./mydb")?;
+db.put("users:1", &json!({"name": "Alice"}), None)?;
+let user = db.get("users:1", None)?;
+db.export_to_directory("/tmp/export", None)?;
+db.create_backup("/backups/full.tar.gz", None)?;
 ```
 
 Key implementation details:
 - Shared worker registry: `OnceLock<Mutex<HashMap<...>>>`
 - 64MB stack for FFI worker thread
-- Command channel: Put, Get, Delete, Query, Shutdown
+- Command channel: Put, Get, Delete, Query, ExecuteSql, SetupRemote, Push, Pull, Fetch, Export, CreateBackup, RestoreBackup, ExportSnapshot, ImportSnapshot, Shutdown
 - Auto library download via `ensure_library_installed()`
+
+### Ruby Bindings
+
+```ruby
+db = ChronDB::Client.new("/tmp/mydb")
+db.put("users:1", { name: "Alice" })
+user = db.get("users:1")
+db.export_to_directory("/tmp/export")
+db.create_backup("/backups/full.tar.gz")
+```
+
+Key implementation details:
+- UniFFI-generated `chrondb_generated.rb` + hand-written `lib/chrondb.rb`
+- Hash-based API with keyword arguments
+- Exception hierarchy: `ChronDB::Error`, `ChronDB::DocumentNotFoundError`
+
+### Node.js Bindings
+
+```javascript
+const { ChronDB } = require('chrondb')
+
+const db = new ChronDB('/tmp/mydb')
+db.put('users:1', { name: 'Alice' })
+const user = db.get('users:1')
+db.exportToDirectory('/tmp/export')
+db.createBackup('/backups/full.tar.gz')
+```
+
+Key implementation details:
+- NAPI-RS compiled to native `.node` binary (not UniFFI)
+- TypeScript definitions in `index.d.ts`
+- camelCase API (JS convention)
 
 ### Testing Bindings
 
@@ -523,6 +596,12 @@ cd bindings/rust && cargo test
 
 # Python
 cd bindings/python && pytest
+
+# Ruby
+cd bindings/ruby && ruby test/test_chrondb.rb
+
+# Node.js
+cd bindings/node && node __test__/test.mjs
 ```
 
 ## Native Image Considerations
@@ -570,7 +649,8 @@ When modifying:
 - **Lucene/search**: Update `docs/architecture.md`, `docs/performance.md`
 - **API endpoints**: Update `docs/` and add examples
 - **Configuration**: Update `config.example.edn` and `docs/quickstart.md`
-- **Bindings**: Update `docs/bindings/python.md` or `docs/bindings/rust.md`
+- **Bindings**: Update `docs/bindings/{python,rust,ruby,nodejs}.md` and `docs/bindings/overview.md`
+- **Export tool**: Update `docs/operations.md`
 
 ## Resources
 

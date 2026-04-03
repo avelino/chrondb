@@ -129,7 +129,6 @@ class ChronDB {
     const result = this._inner.executeSql(sql, branch)
     return JSON.parse(result)
   }
-}
 
   /**
    * Export the repository tree to a filesystem directory.
