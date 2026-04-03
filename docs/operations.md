@@ -244,3 +244,19 @@ java -jar chrondb.jar --command remove-branch --name test-branch
 ### Disk Space Monitoring
 
 ChronDB will grow over time due to the historical storage nature. Monitor disk usage and configure retention policies if necessary.
+
+## FFI / Language Bindings
+
+Export and backup operations are available in all language bindings (Python, Rust, Ruby, Node.js).
+
+### Available Methods
+
+| Operation | Python | Rust | Ruby | Node.js |
+|-----------|--------|------|------|---------|
+| Export to directory | `export_to_directory()` | `export_to_directory()` | `export_to_directory()` | `exportToDirectory()` |
+| Create backup | `create_backup()` | `create_backup()` | `create_backup()` | `createBackup()` |
+| Restore backup | `restore_backup()` | `restore_backup()` | `restore_backup()` | `restoreBackup()` |
+| Export snapshot | `export_snapshot()` | `export_snapshot()` | `export_snapshot()` | `exportSnapshot()` |
+| Import snapshot | `import_snapshot()` | `import_snapshot()` | `import_snapshot()` | `importSnapshot()` |
+
+See the individual [binding documentation](bindings/overview.md) for detailed usage examples.

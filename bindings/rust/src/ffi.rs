@@ -136,6 +136,41 @@ type ChrondbRemoteStatusFn = unsafe extern "C" fn(
     handle: c_int,
 ) -> *mut c_char;
 
+type ChrondbExportFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    target_dir: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char;
+
+type ChrondbCreateBackupFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    output_path: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char;
+
+type ChrondbRestoreBackupFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    input_path: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char;
+
+type ChrondbExportSnapshotFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    output_path: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char;
+
+type ChrondbImportSnapshotFn = unsafe extern "C" fn(
+    thread: *mut graal_isolatethread_t,
+    handle: c_int,
+    input_path: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char;
+
 /// Holds the dynamically loaded library and function pointers.
 pub struct ChronDBLib {
     #[allow(dead_code)]
@@ -160,6 +195,11 @@ pub struct ChronDBLib {
     pub chrondb_pull: ChrondbPullFn,
     pub chrondb_fetch: ChrondbFetchFn,
     pub chrondb_remote_status: ChrondbRemoteStatusFn,
+    pub chrondb_export: ChrondbExportFn,
+    pub chrondb_create_backup: ChrondbCreateBackupFn,
+    pub chrondb_restore_backup: ChrondbRestoreBackupFn,
+    pub chrondb_export_snapshot: ChrondbExportSnapshotFn,
+    pub chrondb_import_snapshot: ChrondbImportSnapshotFn,
 }
 
 // Safety: The library handle and function pointers are safe to share across threads
@@ -304,6 +344,26 @@ impl ChronDBLib {
                 .get::<ChrondbRemoteStatusFn>(b"chrondb_remote_status")
                 .map_err(|e| format!("Symbol chrondb_remote_status not found: {}", e))?;
 
+            let chrondb_export: ChrondbExportFn = *lib
+                .get::<ChrondbExportFn>(b"chrondb_export")
+                .map_err(|e| format!("Symbol chrondb_export not found: {}", e))?;
+
+            let chrondb_create_backup: ChrondbCreateBackupFn = *lib
+                .get::<ChrondbCreateBackupFn>(b"chrondb_create_backup")
+                .map_err(|e| format!("Symbol chrondb_create_backup not found: {}", e))?;
+
+            let chrondb_restore_backup: ChrondbRestoreBackupFn = *lib
+                .get::<ChrondbRestoreBackupFn>(b"chrondb_restore_backup")
+                .map_err(|e| format!("Symbol chrondb_restore_backup not found: {}", e))?;
+
+            let chrondb_export_snapshot: ChrondbExportSnapshotFn = *lib
+                .get::<ChrondbExportSnapshotFn>(b"chrondb_export_snapshot")
+                .map_err(|e| format!("Symbol chrondb_export_snapshot not found: {}", e))?;
+
+            let chrondb_import_snapshot: ChrondbImportSnapshotFn = *lib
+                .get::<ChrondbImportSnapshotFn>(b"chrondb_import_snapshot")
+                .map_err(|e| format!("Symbol chrondb_import_snapshot not found: {}", e))?;
+
             Ok(ChronDBLib {
                 lib,
                 graal_create_isolate,
@@ -326,6 +386,11 @@ impl ChronDBLib {
                 chrondb_pull,
                 chrondb_fetch,
                 chrondb_remote_status,
+                chrondb_export,
+                chrondb_create_backup,
+                chrondb_restore_backup,
+                chrondb_export_snapshot,
+                chrondb_import_snapshot,
             })
         }
     }

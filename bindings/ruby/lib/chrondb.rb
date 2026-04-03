@@ -149,5 +149,85 @@ module ChronDB
     rescue Chrondb::ChronDbError => e
       raise Error, e.message
     end
+
+    # Export the repository tree to a filesystem directory.
+    #
+    # @param target_dir [String] Target directory path
+    # @param branch [String, nil] Branch to export
+    # @param prefix [String, nil] Only export paths matching prefix
+    # @param format [String] "json" (default) or "raw"
+    # @param decode_paths [Boolean] Decode encoded paths (default: true)
+    # @param overwrite [Boolean] Overwrite existing target (default: false)
+    # @return [Hash] Export metadata
+    def export_to_directory(target_dir, branch: nil, prefix: nil, format: "json",
+                            decode_paths: true, overwrite: false)
+      opts = {}
+      opts[:branch] = branch if branch
+      opts[:prefix] = prefix if prefix
+      opts[:format] = format if format != "json"
+      opts[:decode_paths] = false unless decode_paths
+      opts[:overwrite] = true if overwrite
+      result = @inner.export_to_directory(target_dir, opts.empty? ? nil : JSON.generate(opts))
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
+
+    # Create a full backup of the repository.
+    #
+    # @param output_path [String] Backup file path
+    # @param format [String] "tar.gz" (default) or "bundle"
+    # @param verify [Boolean] Run integrity checks (default: true)
+    # @return [Hash] Backup metadata
+    def create_backup(output_path, format: "tar.gz", verify: true)
+      opts = {}
+      opts[:format] = format if format != "tar.gz"
+      opts[:verify] = false unless verify
+      result = @inner.create_backup(output_path, opts.empty? ? nil : JSON.generate(opts))
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
+
+    # Restore the repository from a backup file.
+    #
+    # @param input_path [String] Backup file path
+    # @param format [String] "tar.gz" (default) or "bundle"
+    # @param verify [Boolean] Run integrity checks (default: true)
+    # @return [Hash] Restore metadata
+    def restore_backup(input_path, format: "tar.gz", verify: true)
+      opts = {}
+      opts[:format] = format if format != "tar.gz"
+      opts[:verify] = false unless verify
+      result = @inner.restore_backup(input_path, opts.empty? ? nil : JSON.generate(opts))
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
+
+    # Export the repository to a git bundle snapshot.
+    #
+    # @param output_path [String] Bundle file path
+    # @param refs [Array<String>, nil] Refs to include
+    # @return [Hash] Snapshot metadata
+    def export_snapshot(output_path, refs: nil)
+      opts = {}
+      opts[:refs] = refs if refs
+      result = @inner.export_snapshot(output_path, opts.empty? ? nil : JSON.generate(opts))
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
+
+    # Import a git bundle snapshot into the repository.
+    #
+    # @param input_path [String] Bundle file path
+    # @return [Hash] Import metadata
+    def import_snapshot(input_path)
+      result = @inner.import_snapshot(input_path, nil)
+      JSON.parse(result)
+    rescue Chrondb::ChronDbError => e
+      raise Error, e.message
+    end
   end
 end

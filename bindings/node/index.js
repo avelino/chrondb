@@ -131,4 +131,75 @@ class ChronDB {
   }
 }
 
+  /**
+   * Export the repository tree to a filesystem directory.
+   * @param {string} targetDir - Target directory path
+   * @param {Object} [options]
+   * @param {string} [options.branch] - Branch to export
+   * @param {string} [options.prefix] - Only export paths matching prefix
+   * @param {string} [options.format] - "json" (pretty, default) or "raw"
+   * @param {boolean} [options.decodePaths] - Decode encoded paths (default: true)
+   * @param {boolean} [options.overwrite] - Overwrite existing target (default: false)
+   * @returns {Object} Export metadata
+   */
+  exportToDirectory(targetDir, options = {}) {
+    const opts = {}
+    if (options.branch) opts.branch = options.branch
+    if (options.prefix) opts.prefix = options.prefix
+    if (options.format) opts.format = options.format
+    if (options.decodePaths !== undefined) opts.decode_paths = options.decodePaths
+    if (options.overwrite !== undefined) opts.overwrite = options.overwrite
+    const result = this._inner.exportToDirectory(targetDir, JSON.stringify(opts))
+    return JSON.parse(result)
+  }
+
+  /**
+   * Create a full backup of the repository.
+   * @param {string} outputPath - Backup file path
+   * @param {Object} [options]
+   * @param {string} [options.format] - "tar.gz" (default) or "bundle"
+   * @param {boolean} [options.verify] - Run integrity checks (default: true)
+   * @returns {Object} Backup metadata
+   */
+  createBackup(outputPath, options = {}) {
+    const result = this._inner.createBackup(outputPath, JSON.stringify(options))
+    return JSON.parse(result)
+  }
+
+  /**
+   * Restore the repository from a backup file.
+   * @param {string} inputPath - Backup file path
+   * @param {Object} [options]
+   * @param {string} [options.format] - "tar.gz" (default) or "bundle"
+   * @param {boolean} [options.verify] - Run integrity checks (default: true)
+   * @returns {Object} Restore metadata
+   */
+  restoreBackup(inputPath, options = {}) {
+    const result = this._inner.restoreBackup(inputPath, JSON.stringify(options))
+    return JSON.parse(result)
+  }
+
+  /**
+   * Export the repository to a git bundle snapshot.
+   * @param {string} outputPath - Bundle file path
+   * @param {Object} [options]
+   * @param {string[]} [options.refs] - Refs to include
+   * @returns {Object} Snapshot metadata
+   */
+  exportSnapshot(outputPath, options = {}) {
+    const result = this._inner.exportSnapshot(outputPath, JSON.stringify(options))
+    return JSON.parse(result)
+  }
+
+  /**
+   * Import a git bundle snapshot into the repository.
+   * @param {string} inputPath - Bundle file path
+   * @returns {Object} Import metadata
+   */
+  importSnapshot(inputPath) {
+    const result = this._inner.importSnapshot(inputPath, '{}')
+    return JSON.parse(result)
+  }
+}
+
 module.exports = { ChronDB }

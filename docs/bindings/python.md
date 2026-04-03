@@ -439,6 +439,45 @@ def test_put_and_get(db):
     assert doc["value"] == 42
 ```
 
+## Export & Backup
+
+### Export to Directory
+
+```python
+# Export current state to filesystem
+result = db.export_to_directory("/tmp/export")
+print(f"Exported {result['files_exported']} files")
+
+# Export specific branch with prefix filter
+result = db.export_to_directory(
+    "/tmp/export",
+    branch="feature-x",
+    prefix="users",
+    format="json",        # "json" (pretty) or "raw"
+    decode_paths=True,    # decode encoded paths
+    overwrite=True        # overwrite existing directory
+)
+```
+
+### Backup & Restore
+
+```python
+# Create a full backup
+result = db.create_backup("/backups/full.tar.gz")
+print(f"Backup at: {result['path']}")
+
+# Create a bundle backup
+result = db.create_backup("/backups/full.bundle", format="bundle")
+
+# Restore from backup
+result = db.restore_backup("/backups/full.tar.gz")
+print(f"Restore type: {result['restore_type']}")
+
+# Export/import git bundle snapshots
+result = db.export_snapshot("/backups/main.bundle")
+result = db.import_snapshot("/backups/main.bundle")
+```
+
 ## Building from Source
 
 ```bash
