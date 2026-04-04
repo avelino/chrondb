@@ -19,9 +19,9 @@ package chrondb
 
 #include <stdlib.h>
 
-// GraalVM isolate types
-typedef void graal_isolate_t;
-typedef void graal_isolatethread_t;
+// GraalVM isolate types (opaque structs for cgo compatibility)
+typedef struct graal_isolate graal_isolate_t;
+typedef struct graal_isolatethread graal_isolatethread_t;
 
 typedef struct {
     int version;

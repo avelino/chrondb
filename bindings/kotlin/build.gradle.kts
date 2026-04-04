@@ -13,6 +13,7 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.14.0")
     implementation("org.json:json:20240303")
     testImplementation(kotlin("test"))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
