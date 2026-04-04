@@ -1,9 +1,9 @@
 package com.chrondb
 
+import clojure.java.api.Clojure
+import clojure.lang.IFn
 import org.json.JSONArray
 import org.json.JSONObject
-import uniffi.chrondb.ChronDb as ChronDbInner
-import uniffi.chrondb.ChronDbException as InnerException
 
 /** Base exception for all ChronDB errors. */
 open class ChronDBException(message: String) : Exception(message)
@@ -14,6 +14,8 @@ class DocumentNotFoundException(message: String = "Document not found") : ChronD
 /**
  * A connection to a ChronDB database instance.
  *
+ * Uses the ChronDB Clojure core directly on the JVM — no FFI, no native-image.
+ *
  * ```kotlin
  * val db = ChronDB.openPath("/tmp/mydb")
  * db.put("user:1", mapOf("name" to "Alice", "age" to 30))
@@ -21,21 +23,32 @@ class DocumentNotFoundException(message: String = "Document not found") : ChronD
  * db.close()
  * ```
  */
-class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseable {
+class ChronDB private constructor(private val handle: Int) : AutoCloseable {
 
     companion object {
+        private val require: IFn = Clojure.`var`("clojure.core", "require")
+        private val read: IFn = Clojure.`var`("clojure.core", "read-string")
+
+        init {
+            require.invoke(read.invoke("chrondb.lib.core"))
+        }
+
+        private fun libFn(name: String): IFn = Clojure.`var`("chrondb.lib.core", name)
+
         /**
          * Open a database using a single directory path (preferred).
          *
          * @param dbPath Path for the database directory
          */
         fun openPath(dbPath: String): ChronDB {
-            Setup.ensureLibraryInstalled()
-            return try {
-                ChronDB(ChronDbInner.openPath(dbPath))
-            } catch (e: InnerException) {
-                throw mapError(e)
+            val handle = libFn("lib-open-path").invoke(dbPath) as? Long
+                ?: throw ChronDBException("Failed to open database")
+            val h = handle.toInt()
+            if (h < 0) {
+                val err = lastErrorGlobal() ?: "Failed to open database"
+                throw ChronDBException(err)
             }
+            return ChronDB(h)
         }
 
         /**
@@ -45,41 +58,18 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
          */
         @Deprecated("Use openPath() instead — the index is managed automatically.")
         fun open(dataPath: String, indexPath: String): ChronDB {
-            Setup.ensureLibraryInstalled()
-            return try {
-                ChronDB(ChronDbInner.open(dataPath, indexPath))
-            } catch (e: InnerException) {
-                throw mapError(e)
+            val handle = libFn("lib-open").invoke(dataPath, indexPath) as? Long
+                ?: throw ChronDBException("Failed to open database")
+            val h = handle.toInt()
+            if (h < 0) {
+                val err = lastErrorGlobal() ?: "Failed to open database"
+                throw ChronDBException(err)
             }
+            return ChronDB(h)
         }
 
-        /**
-         * Open a database with idle timeout.
-         *
-         * @param dataPath Path for data storage
-         * @param indexPath Path for the Lucene index
-         * @param idleTimeoutSecs Seconds before suspending the GraalVM isolate
-         */
-        fun openWithIdleTimeout(dataPath: String, indexPath: String, idleTimeoutSecs: ULong): ChronDB {
-            Setup.ensureLibraryInstalled()
-            return try {
-                ChronDB(ChronDbInner.openWithIdleTimeout(dataPath, indexPath, idleTimeoutSecs))
-            } catch (e: InnerException) {
-                throw mapError(e)
-            }
-        }
-
-        private fun mapError(e: InnerException): ChronDBException {
-            return when (e) {
-                is InnerException.NotFound -> DocumentNotFoundException(e.message ?: "Document not found")
-                is InnerException.SetupFailed -> ChronDBException("Library setup failed: ${e.msg}")
-                is InnerException.OpenFailed -> ChronDBException("Failed to open database: ${e.msg}")
-                is InnerException.OperationFailed -> ChronDBException("Operation failed: ${e.msg}")
-                is InnerException.JsonException -> ChronDBException("JSON error: ${e.msg}")
-                is InnerException.IsolateCreationFailed -> ChronDBException("Failed to create GraalVM isolate")
-                is InnerException.CloseFailed -> ChronDBException("Failed to close database")
-                else -> ChronDBException(e.message ?: "Unknown error")
-            }
+        private fun lastErrorGlobal(): String? {
+            return libFn("lib-last-error").invoke() as? String
         }
     }
 
@@ -95,11 +85,9 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
      */
     fun put(id: String, doc: Map<String, Any?>, branch: String? = null): Map<String, Any?> {
         val jsonDoc = JSONObject(doc).toString()
-        return try {
-            parseObject(inner.put(id, jsonDoc, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-put").invoke(handle, id, jsonDoc, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Put failed")
+        return parseObject(result)
     }
 
     /**
@@ -111,11 +99,16 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
      * @throws DocumentNotFoundException if not found
      */
     fun get(id: String, branch: String? = null): Map<String, Any?> {
-        return try {
-            parseObject(inner.get(id, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
+        val result = libFn("lib-get").invoke(handle, id, branch)
+            as? String
+        if (result == null) {
+            val err = lastErrorGlobal()
+            if (err != null && err.lowercase().contains("not found")) {
+                throw DocumentNotFoundException(err)
+            }
+            throw ChronDBException(err ?: "Get failed")
         }
+        return parseObject(result)
     }
 
     /**
@@ -126,151 +119,81 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
      * @throws DocumentNotFoundException if not found
      */
     fun delete(id: String, branch: String? = null) {
-        try {
-            inner.delete(id, branch)
-        } catch (e: InnerException) {
-            throw mapError(e)
+        val result = (libFn("lib-delete").invoke(handle, id, branch) as? Long)?.toInt() ?: -1
+        when (result) {
+            0 -> return
+            1 -> throw DocumentNotFoundException()
+            else -> throw ChronDBException(lastErrorGlobal() ?: "Delete failed")
         }
     }
 
     // -- Query --
 
-    /**
-     * List documents by ID prefix.
-     *
-     * @param prefix ID prefix to match
-     * @param branch Optional branch name
-     * @return Parsed JSON result (List or Map)
-     */
     fun listByPrefix(prefix: String, branch: String? = null): Any {
-        return try {
-            parseAny(inner.listByPrefix(prefix, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-list-by-prefix").invoke(handle, prefix, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "List by prefix failed")
+        return parseAny(result)
     }
 
-    /**
-     * List documents by table name.
-     *
-     * @param table Table name
-     * @param branch Optional branch name
-     * @return Parsed JSON result
-     */
     fun listByTable(table: String, branch: String? = null): Any {
-        return try {
-            parseAny(inner.listByTable(table, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-list-by-table").invoke(handle, table, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "List by table failed")
+        return parseAny(result)
     }
 
-    /**
-     * Get the change history of a document.
-     *
-     * @param id Document ID
-     * @param branch Optional branch name
-     * @return List of historical versions
-     */
     fun history(id: String, branch: String? = null): Any {
-        return try {
-            parseAny(inner.history(id, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-history").invoke(handle, id, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "History failed")
+        return parseAny(result)
     }
 
-    /**
-     * Execute a query against the Lucene index.
-     *
-     * @param query Query in Lucene AST format
-     * @param branch Optional branch name
-     * @return Query results
-     */
     fun query(query: Map<String, Any?>, branch: String? = null): Any {
         val queryJson = JSONObject(query).toString()
-        return try {
-            parseAny(inner.query(queryJson, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-query").invoke(handle, queryJson, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Query failed")
+        return parseAny(result)
     }
 
-    /**
-     * Execute a SQL query against the database.
-     *
-     * @param sql SQL statement
-     * @param branch Optional branch name
-     * @return Query results
-     */
     fun execute(sql: String, branch: String? = null): Any {
-        return try {
-            parseAny(inner.executeSql(sql, branch))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-execute-sql").invoke(handle, sql, branch)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "SQL execution failed")
+        return parseAny(result)
     }
 
     // -- Remote --
 
-    /** Configure a remote URL for push/pull. */
     fun setupRemote(remoteUrl: String): Any {
-        return try {
-            parseAny(inner.setupRemote(remoteUrl))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-setup-remote").invoke(handle, remoteUrl)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Setup remote failed")
+        return parseAny(result)
     }
 
-    /** Push changes to the configured remote. */
     fun push(): Any {
-        return try {
-            parseAny(inner.push())
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-push").invoke(handle)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Push failed")
+        return parseAny(result)
     }
 
-    /** Pull changes from the configured remote. */
     fun pull(): Any {
-        return try {
-            parseAny(inner.pull())
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-pull").invoke(handle)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Pull failed")
+        return parseAny(result)
     }
 
-    /** Fetch changes from the configured remote without merging. */
     fun fetch(): Any {
-        return try {
-            parseAny(inner.fetch())
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-fetch").invoke(handle)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Fetch failed")
+        return parseAny(result)
     }
 
-    /** Get the remote synchronization status. */
     fun remoteStatus(): Any {
-        return try {
-            parseAny(inner.remoteStatus())
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-remote-status").invoke(handle)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Remote status failed")
+        return parseAny(result)
     }
 
     // -- Export & Backup --
 
-    /**
-     * Export the repository tree to a filesystem directory.
-     *
-     * @param targetDir Target directory path
-     * @param branch Branch to export
-     * @param prefix Only export paths matching prefix
-     * @param format "json" (default) or "raw"
-     * @param decodePaths Decode encoded paths (default: true)
-     * @param overwrite Overwrite existing target (default: false)
-     * @return Export metadata
-     */
     fun exportToDirectory(
         targetDir: String,
         branch: String? = null,
@@ -286,103 +209,56 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
         if (!decodePaths) opts["decode_paths"] = false
         if (overwrite) opts["overwrite"] = true
         val optsJson = if (opts.isEmpty()) null else JSONObject(opts as Map<String, Any>).toString()
-        return try {
-            parseAny(inner.exportToDirectory(targetDir, optsJson))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-export").invoke(handle, targetDir, optsJson)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Export failed")
+        return parseAny(result)
     }
 
-    /**
-     * Create a full backup of the repository.
-     *
-     * @param outputPath Backup file path
-     * @param format "tar.gz" (default) or "bundle"
-     * @param verify Run integrity checks (default: true)
-     * @return Backup metadata
-     */
     fun createBackup(outputPath: String, format: String = "tar.gz", verify: Boolean = true): Any {
         val opts = mutableMapOf<String, Any>()
         if (format != "tar.gz") opts["format"] = format
         if (!verify) opts["verify"] = false
         val optsJson = if (opts.isEmpty()) null else JSONObject(opts as Map<String, Any>).toString()
-        return try {
-            parseAny(inner.createBackup(outputPath, optsJson))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-create-backup").invoke(handle, outputPath, optsJson)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Backup failed")
+        return parseAny(result)
     }
 
-    /**
-     * Restore the repository from a backup file.
-     *
-     * @param inputPath Backup file path
-     * @param format "tar.gz" (default) or "bundle"
-     * @param verify Run integrity checks (default: true)
-     * @return Restore metadata
-     */
     fun restoreBackup(inputPath: String, format: String = "tar.gz", verify: Boolean = true): Any {
         val opts = mutableMapOf<String, Any>()
         if (format != "tar.gz") opts["format"] = format
         if (!verify) opts["verify"] = false
         val optsJson = if (opts.isEmpty()) null else JSONObject(opts as Map<String, Any>).toString()
-        return try {
-            parseAny(inner.restoreBackup(inputPath, optsJson))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-restore-backup").invoke(handle, inputPath, optsJson)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Restore failed")
+        return parseAny(result)
     }
 
-    /**
-     * Export the repository to a git bundle snapshot.
-     *
-     * @param outputPath Bundle file path
-     * @param refs Refs to include (null for all)
-     * @return Snapshot metadata
-     */
     fun exportSnapshot(outputPath: String, refs: List<String>? = null): Any {
         val opts = mutableMapOf<String, Any>()
         refs?.let { opts["refs"] = it }
         val optsJson = if (opts.isEmpty()) null else JSONObject(opts as Map<String, Any>).toString()
-        return try {
-            parseAny(inner.exportSnapshot(outputPath, optsJson))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-export-snapshot").invoke(handle, outputPath, optsJson)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Export snapshot failed")
+        return parseAny(result)
     }
 
-    /**
-     * Import a git bundle snapshot into the repository.
-     *
-     * @param inputPath Bundle file path
-     * @return Import metadata
-     */
     fun importSnapshot(inputPath: String): Any {
-        return try {
-            parseAny(inner.importSnapshot(inputPath, null))
-        } catch (e: InnerException) {
-            throw mapError(e)
-        }
+        val result = libFn("lib-import-snapshot").invoke(handle, inputPath, null)
+            as? String ?: throw ChronDBException(lastErrorGlobal() ?: "Import snapshot failed")
+        return parseAny(result)
     }
-
-    /** Get the last error message, if any. */
-    fun lastError(): String? = inner.lastError()
 
     override fun close() {
-        inner.close()
+        libFn("lib-close").invoke(handle)
     }
 
-    // -- Internal JSON helpers --
+    // -- Internal --
 
-    private fun parseObject(json: String): Map<String, Any?> {
-        return JSONObject(json).toMap()
-    }
+    private fun parseObject(json: String): Map<String, Any?> = JSONObject(json).toMap()
 
     private fun parseAny(json: String): Any {
-        return if (json.trimStart().startsWith("[")) {
-            JSONArray(json).toList()
-        } else {
-            JSONObject(json).toMap()
-        }
+        return if (json.trimStart().startsWith("[")) JSONArray(json).toList()
+        else JSONObject(json).toMap()
     }
 }

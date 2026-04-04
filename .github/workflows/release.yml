@@ -590,50 +590,33 @@ jobs:
   # --- Kotlin ---
 
   package-kotlin:
-    needs: [build-native-lib, build-uniffi]
-    runs-on: ${{ matrix.os }}
-    name: "Package Kotlin binding on ${{ matrix.os }}"
-    strategy:
-      matrix:
-        os: ["macos-14", "ubuntu-22.04"]
-        include:
-          - os: macos-14
-            arch: aarch64
-            lib_ext: dylib
-          - os: ubuntu-22.04
-            arch: x86_64
-            lib_ext: so
+    needs: build-native-lib
+    runs-on: ubuntu-22.04
+    name: "Package Kotlin binding (JVM)"
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - uses: DeLaGuardo/setup-clojure@13.4
         with:
-          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
-          path: target/
+          cli: 1.12.3.1577
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/download-artifact@v4
+      - uses: graalvm/setup-graalvm@v1
         with:
-          name: uniffi-${{ runner.os }}-${{ matrix.arch }}
-          path: bindings/uniffi/
+          java-version: "21"
+          distribution: "graalvm"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine platform
-        id: platform
-        run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
-          else
-            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
-          fi
+      - name: Build uberjar
+        run: clojure -M:build -- --uberjar
 
       - name: Package Kotlin tarball
         env:
           VERSION: ${{ needs.build-native-lib.outputs.version }}
         run: |
-          PLATFORM="${{ steps.platform.outputs.name }}"
-          PKG_DIR="chrondb-kotlin-${VERSION}-${PLATFORM}"
+          PKG_DIR="chrondb-kotlin-${VERSION}"
 
           mkdir -p "${PKG_DIR}/src/main/kotlin/com/chrondb"
-          mkdir -p "${PKG_DIR}/src/main/kotlin/uniffi/chrondb"
           mkdir -p "${PKG_DIR}/src/test/kotlin/com/chrondb"
           mkdir -p "${PKG_DIR}/lib"
 
@@ -643,18 +626,14 @@ jobs:
           cp bindings/kotlin/src/main/kotlin/com/chrondb/ChronDB.kt "${PKG_DIR}/src/main/kotlin/com/chrondb/"
           cp bindings/kotlin/src/test/kotlin/com/chrondb/ChronDBTest.kt "${PKG_DIR}/src/test/kotlin/com/chrondb/"
 
-          # Copy UniFFI-generated Kotlin
-          cp bindings/uniffi/generated/uniffi/chrondb/chrondb.kt "${PKG_DIR}/src/main/kotlin/uniffi/chrondb/"
+          # Include the uberjar
+          cp target/chrondb.jar "${PKG_DIR}/lib/"
 
-          # Copy native libraries
-          cp target/libchrondb.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
-          cp bindings/uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
-
-          tar -czf "chrondb-kotlin-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
+          tar -czf "chrondb-kotlin-${VERSION}.tar.gz" "${PKG_DIR}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chrondb-kotlin-${{ steps.platform.outputs.name }}
+          name: chrondb-kotlin
           path: chrondb-kotlin-*.tar.gz
 
   # --- Dart ---

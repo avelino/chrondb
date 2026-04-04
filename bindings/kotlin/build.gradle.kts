@@ -10,17 +10,19 @@ repositories {
 }
 
 dependencies {
-    implementation("net.java.dev.jna:jna:5.14.0")
+    // ChronDB runs on the JVM — use Clojure interop directly, no FFI needed
+    implementation("org.clojure:clojure:1.11.1")
     implementation("org.json:json:20240303")
+
+    // ChronDB uberjar (added to classpath at runtime or via local file)
+    implementation(files("../../target/chrondb.jar"))
+
     testImplementation(kotlin("test"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
     useJUnitPlatform()
-    val libDir = System.getenv("CHRONDB_LIB_DIR") ?: "${projectDir}/lib"
-    systemProperty("java.library.path", libDir)
-    systemProperty("jna.library.path", libDir)
 }
 
 sourceSets {

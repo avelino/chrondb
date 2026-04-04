@@ -326,21 +326,16 @@ jobs:
           echo "Swift bindings verified — full test requires UniFFI scaffolding (tested in release pipeline)"
 
   test-kotlin:
-    needs: [build-native-lib, build-uniffi]
+    needs: build-native-lib
     runs-on: ubuntu-22.04
-    name: "Test Kotlin (UniFFI)"
+    name: "Test Kotlin (JVM)"
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - uses: DeLaGuardo/setup-clojure@13.4
         with:
-          name: libchrondb-Linux
-          path: target/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: uniffi-bindings
-          path: bindings/uniffi/
+          cli: 1.12.3.1577
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-java@v4
         with:
@@ -349,14 +344,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup Kotlin package
-        working-directory: bindings/kotlin
-        run: |
-          mkdir -p src/main/kotlin/uniffi/chrondb
-          cp ../uniffi/generated/uniffi/chrondb/chrondb.kt src/main/kotlin/uniffi/chrondb/
-          mkdir -p lib
-          cp ../../target/libchrondb.so lib/
-          cp ../uniffi/target/release/libchrondb_uniffi.so lib/
+      - name: Build ChronDB uberjar
+        run: clojure -M:build -- --uberjar
 
       - name: Configure Git
         run: |
@@ -366,9 +355,6 @@ jobs:
 
       - name: Run Kotlin tests
         working-directory: bindings/kotlin
-        env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/target:${{ github.workspace }}/bindings/kotlin/lib
-          CHRONDB_LIB_DIR: ${{ github.workspace }}/bindings/kotlin/lib
         run: gradle test
 
   test-dart:
