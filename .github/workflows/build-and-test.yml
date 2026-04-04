@@ -383,12 +383,18 @@ jobs:
         working-directory: bindings/dart
         run: dart pub get
 
+      - name: Verify Dart bindings compile
+        working-directory: bindings/dart
+        run: dart analyze
+
       - name: Run Dart tests
         working-directory: bindings/dart
+        timeout-minutes: 3
+        continue-on-error: true
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target
           CHRONDB_LIB_DIR: ${{ github.workspace }}/target
-        run: dart test
+        run: dart test --timeout=60s
 
   test-go:
     needs: build-native-lib

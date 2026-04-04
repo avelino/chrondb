@@ -64,7 +64,10 @@ void _downloadLibrary() {
   final tempFile = p.join(Directory.systemTemp.path, 'chrondb-download-${pid}.tar.gz');
 
   // Download using curl (available on macOS and Linux)
-  var result = Process.runSync('curl', ['-fSL', '-o', tempFile, url]);
+  var result = Process.runSync('curl', [
+    '-fSL', '--connect-timeout', '10', '--max-time', '60',
+    '-o', tempFile, url,
+  ]);
   if (result.exitCode != 0) {
     throw Exception('Download failed: ${result.stderr}');
   }
