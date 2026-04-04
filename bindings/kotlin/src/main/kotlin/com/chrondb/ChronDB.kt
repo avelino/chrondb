@@ -30,6 +30,7 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
          * @param dbPath Path for the database directory
          */
         fun openPath(dbPath: String): ChronDB {
+            Setup.ensureLibraryInstalled()
             return try {
                 ChronDB(ChronDbInner.openPath(dbPath))
             } catch (e: InnerException) {
@@ -44,6 +45,7 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
          */
         @Deprecated("Use openPath() instead — the index is managed automatically.")
         fun open(dataPath: String, indexPath: String): ChronDB {
+            Setup.ensureLibraryInstalled()
             return try {
                 ChronDB(ChronDbInner.open(dataPath, indexPath))
             } catch (e: InnerException) {
@@ -59,6 +61,7 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
          * @param idleTimeoutSecs Seconds before suspending the GraalVM isolate
          */
         fun openWithIdleTimeout(dataPath: String, indexPath: String, idleTimeoutSecs: ULong): ChronDB {
+            Setup.ensureLibraryInstalled()
             return try {
                 ChronDB(ChronDbInner.openWithIdleTimeout(dataPath, indexPath, idleTimeoutSecs))
             } catch (e: InnerException) {
@@ -72,7 +75,7 @@ class ChronDB private constructor(private val inner: ChronDbInner) : AutoCloseab
                 is InnerException.SetupFailed -> ChronDBException("Library setup failed: ${e.msg}")
                 is InnerException.OpenFailed -> ChronDBException("Failed to open database: ${e.msg}")
                 is InnerException.OperationFailed -> ChronDBException("Operation failed: ${e.msg}")
-                is InnerException.JsonError -> ChronDBException("JSON error: ${e.msg}")
+                is InnerException.JsonException -> ChronDBException("JSON error: ${e.msg}")
                 is InnerException.IsolateCreationFailed -> ChronDBException("Failed to create GraalVM isolate")
                 is InnerException.CloseFailed -> ChronDBException("Failed to close database")
                 else -> ChronDBException(e.message ?: "Unknown error")
