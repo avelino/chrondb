@@ -12,6 +12,8 @@ libchrondb.so (GraalVM/Clojure — core database engine)
     │
     ├── UniFFI  → Python, Ruby, Kotlin, Swift
     ├── NAPI-RS → Node.js
+    ├── dart:ffi → Dart/Flutter
+    ├── cgo     → Go
     └── Native  → Rust (direct crate dependency)
 ```
 
@@ -45,8 +47,10 @@ Key references:
 | [Python](python.md) | UniFFI | Stable | `chrondb` on PyPI |
 | [Ruby](ruby.md) | UniFFI | Stable | `chrondb` gem |
 | [Node.js](nodejs.md) | NAPI-RS | Stable | `chrondb` on npm |
-| [Kotlin](kotlin.md) | UniFFI | Stable | Maven artifact |
-| [Swift](swift.md) | UniFFI | Stable | Swift package |
+| [Kotlin](kotlin.md) | UniFFI | Stable | GitHub Release tarball |
+| [Swift](swift.md) | UniFFI | Stable | GitHub Release tarball |
+| [Dart/Flutter](dart.md) | dart:ffi | Stable | GitHub Release tarball |
+| [Go](go.md) | cgo | Stable | GitHub Release tarball |
 
 ## API Consistency
 

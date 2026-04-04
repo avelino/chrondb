@@ -302,8 +302,8 @@ jobs:
         working-directory: bindings/python
         run: |
           # Convert SemVer prerelease (0.2.3-dev.abc1234) to PEP 440 (0.2.3.devabc1234)
-          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\(.*\)/.dev\1/')
-          echo "$PY_VERSION" > VERSION
+          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\(.*\)/.dev\1/' | tr -d '[:space:]')
+          printf '%s' "$PY_VERSION" > VERSION
 
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
           cp ../uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} chrondb/_generated/
@@ -514,10 +514,246 @@ jobs:
             npm publish "$pkg" --access public || true
           done
 
+  # --- Swift ---
+
+  package-swift:
+    needs: [build-native-lib, build-uniffi]
+    runs-on: ${{ matrix.os }}
+    name: "Package Swift binding on ${{ matrix.os }}"
+    strategy:
+      matrix:
+        os: ["macos-14", "ubuntu-22.04"]
+        include:
+          - os: macos-14
+            arch: aarch64
+            lib_ext: dylib
+          - os: ubuntu-22.04
+            arch: x86_64
+            lib_ext: so
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
+          path: target/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: uniffi-${{ runner.os }}-${{ matrix.arch }}
+          path: bindings/uniffi/
+
+      - name: Determine platform
+        id: platform
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Swift tarball
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          PLATFORM="${{ steps.platform.outputs.name }}"
+          PKG_DIR="chrondb-swift-${VERSION}-${PLATFORM}"
+
+          mkdir -p "${PKG_DIR}/Sources/ChronDB"
+          mkdir -p "${PKG_DIR}/Sources/ChronDBFFI/headers"
+          mkdir -p "${PKG_DIR}/Tests/ChronDBTests"
+          mkdir -p "${PKG_DIR}/lib"
+
+          # Copy wrapper and Package.swift
+          cp bindings/swift/Package.swift "${PKG_DIR}/"
+          cp bindings/swift/Sources/ChronDB/ChronDB.swift "${PKG_DIR}/Sources/ChronDB/"
+          cp bindings/swift/Tests/ChronDBTests/ChronDBTests.swift "${PKG_DIR}/Tests/ChronDBTests/"
+
+          # Copy UniFFI-generated Swift
+          cp bindings/uniffi/generated/chrondb.swift "${PKG_DIR}/Sources/ChronDB/chrondb_generated.swift"
+
+          # Copy FFI module map and header
+          cp bindings/swift/Sources/ChronDBFFI/module.modulemap "${PKG_DIR}/Sources/ChronDBFFI/"
+          cp bindings/uniffi/generated/chrondbFFI.h "${PKG_DIR}/Sources/ChronDBFFI/headers/" || true
+
+          # Copy native libraries
+          cp target/libchrondb.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
+          cp bindings/uniffi/target/release/libchrondb_uniffi.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
+
+          tar -czf "chrondb-swift-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrondb-swift-${{ steps.platform.outputs.name }}
+          path: chrondb-swift-*.tar.gz
+
+  # --- Kotlin ---
+
+  package-kotlin:
+    needs: build-native-lib
+    runs-on: ubuntu-22.04
+    name: "Package Kotlin binding (JVM)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeLaGuardo/setup-clojure@13.4
+        with:
+          cli: 1.12.3.1577
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: "graalvm"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build uberjar
+        run: clojure -M:build -- --uberjar
+
+      - name: Package Kotlin tarball
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          PKG_DIR="chrondb-kotlin-${VERSION}"
+
+          mkdir -p "${PKG_DIR}/src/main/kotlin/com/chrondb"
+          mkdir -p "${PKG_DIR}/src/test/kotlin/com/chrondb"
+          mkdir -p "${PKG_DIR}/lib"
+
+          # Copy wrapper and build files
+          cp bindings/kotlin/build.gradle.kts "${PKG_DIR}/"
+          cp bindings/kotlin/settings.gradle.kts "${PKG_DIR}/"
+          cp bindings/kotlin/src/main/kotlin/com/chrondb/ChronDB.kt "${PKG_DIR}/src/main/kotlin/com/chrondb/"
+          cp bindings/kotlin/src/test/kotlin/com/chrondb/ChronDBTest.kt "${PKG_DIR}/src/test/kotlin/com/chrondb/"
+
+          # Include the uberjar
+          cp target/chrondb.jar "${PKG_DIR}/lib/"
+
+          tar -czf "chrondb-kotlin-${VERSION}.tar.gz" "${PKG_DIR}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrondb-kotlin
+          path: chrondb-kotlin-*.tar.gz
+
+  # --- Dart ---
+
+  package-dart:
+    needs: build-native-lib
+    runs-on: ${{ matrix.os }}
+    name: "Package Dart binding on ${{ matrix.os }}"
+    strategy:
+      matrix:
+        os: ["macos-14", "ubuntu-22.04"]
+        include:
+          - os: macos-14
+            arch: aarch64
+            lib_ext: dylib
+          - os: ubuntu-22.04
+            arch: x86_64
+            lib_ext: so
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
+          path: target/
+
+      - name: Determine platform
+        id: platform
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Dart tarball
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          PLATFORM="${{ steps.platform.outputs.name }}"
+          PKG_DIR="chrondb-dart-${VERSION}-${PLATFORM}"
+
+          mkdir -p "${PKG_DIR}/lib/src"
+          mkdir -p "${PKG_DIR}/test"
+          mkdir -p "${PKG_DIR}/native"
+
+          cp bindings/dart/pubspec.yaml "${PKG_DIR}/"
+          cp bindings/dart/lib/chrondb.dart "${PKG_DIR}/lib/"
+          cp bindings/dart/lib/src/*.dart "${PKG_DIR}/lib/src/"
+          cp bindings/dart/test/*.dart "${PKG_DIR}/test/"
+          cp target/libchrondb.${{ matrix.lib_ext }} "${PKG_DIR}/native/"
+
+          tar -czf "chrondb-dart-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrondb-dart-${{ steps.platform.outputs.name }}
+          path: chrondb-dart-*.tar.gz
+
+  # --- Go ---
+
+  package-go:
+    needs: build-native-lib
+    runs-on: ${{ matrix.os }}
+    name: "Package Go binding on ${{ matrix.os }}"
+    strategy:
+      matrix:
+        os: ["macos-14", "ubuntu-22.04"]
+        include:
+          - os: macos-14
+            arch: aarch64
+            lib_ext: dylib
+          - os: ubuntu-22.04
+            arch: x86_64
+            lib_ext: so
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
+          path: target/
+
+      - name: Determine platform
+        id: platform
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "name=macos-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=linux-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Go tarball
+        env:
+          VERSION: ${{ needs.build-native-lib.outputs.version }}
+        run: |
+          PLATFORM="${{ steps.platform.outputs.name }}"
+          PKG_DIR="chrondb-go-${VERSION}-${PLATFORM}"
+
+          mkdir -p "${PKG_DIR}/include"
+          mkdir -p "${PKG_DIR}/lib"
+
+          cp bindings/go/go.mod "${PKG_DIR}/"
+          cp bindings/go/chrondb.go "${PKG_DIR}/"
+          cp bindings/go/chrondb_test.go "${PKG_DIR}/"
+          cp target/libchrondb.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
+          cp target/libchrondb.h "${PKG_DIR}/include/" || true
+          cp target/graal_isolate.h "${PKG_DIR}/include/" || true
+
+          tar -czf "chrondb-go-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrondb-go-${{ steps.platform.outputs.name }}
+          path: chrondb-go-*.tar.gz
+
   # --- GitHub Release ---
 
   create-release:
-    needs: [build-native-lib, package-rust, package-python, package-ruby, build-node]
+    needs: [build-native-lib, package-rust, package-python, package-ruby, build-node, package-swift, package-kotlin, package-dart, package-go]
     runs-on: ubuntu-22.04
     name: "Create GitHub Release"
     permissions:
@@ -568,7 +804,9 @@ jobs:
           done
 
           # Move Rust tarballs
-          cp artifacts/chrondb-rust-*/*.tar.gz release-assets/ || true
+          echo "Looking for Rust tarballs..."
+          ls -la artifacts/chrondb-rust-*/ 2>/dev/null || echo "WARNING: No Rust artifact directories found"
+          cp artifacts/chrondb-rust-*/*.tar.gz release-assets/ || echo "WARNING: Failed to copy Rust tarballs"
 
           # Move Python wheels
           if [ "$VERSION" = "latest" ]; then
@@ -582,6 +820,22 @@ jobs:
 
           # Move Node.js tarballs
           cp artifacts/chrondb-node-*/*.tgz release-assets/ || true
+
+          # Move Swift tarballs
+          echo "Looking for Swift tarballs..."
+          cp artifacts/chrondb-swift-*/*.tar.gz release-assets/ || echo "WARNING: Failed to copy Swift tarballs"
+
+          # Move Kotlin tarballs
+          echo "Looking for Kotlin tarballs..."
+          cp artifacts/chrondb-kotlin-*/*.tar.gz release-assets/ || echo "WARNING: Failed to copy Kotlin tarballs"
+
+          # Move Dart tarballs
+          echo "Looking for Dart tarballs..."
+          cp artifacts/chrondb-dart-*/*.tar.gz release-assets/ || echo "WARNING: Failed to copy Dart tarballs"
+
+          # Move Go tarballs
+          echo "Looking for Go tarballs..."
+          cp artifacts/chrondb-go-*/*.tar.gz release-assets/ || echo "WARNING: Failed to copy Go tarballs"
 
           echo "Release assets:"
           ls -la release-assets/
@@ -612,5 +866,9 @@ jobs:
             | Python | `pip install chrondb` |
             | Ruby | `gem install chrondb` |
             | Node.js | `npm install chrondb` |
+            | Swift | Download `chrondb-swift-*.tar.gz` from assets below |
+            | Kotlin | Download `chrondb-kotlin-*.tar.gz` from assets below |
+            | Dart/Flutter | Download `chrondb-dart-*.tar.gz` from assets below |
+            | Go | Download `chrondb-go-*.tar.gz` from assets below |
 
             All bindings are auto-generated from the Rust SDK. See [docs](https://chrondb.avelino.run/) for usage.
