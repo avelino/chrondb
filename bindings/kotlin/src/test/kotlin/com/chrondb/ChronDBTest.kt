@@ -94,16 +94,18 @@ class ChronDBTest {
     }
 
     @Test
-    fun testIdleTimeout() {
+    fun testOpenDeprecated() {
         assumeTrue(libAvailable, "ChronDB shared library not available")
-        val dir = tempDir.resolve("timeout-db").toString()
-        val timeoutDb = ChronDB.openWithIdleTimeout(dir, "$dir/.chrondb-index", 120u)
+        val dir = tempDir.resolve("deprecated-db").toString()
+        val idx = "$dir/.chrondb-index"
+        @Suppress("DEPRECATION")
+        val db2 = ChronDB.open(dir, idx)
         try {
-            timeoutDb.put("test:1", mapOf("ok" to true))
-            val doc = timeoutDb.get("test:1")
+            db2.put("test:1", mapOf("ok" to true))
+            val doc = db2.get("test:1")
             assertEquals(true, doc["ok"])
         } finally {
-            timeoutDb.close()
+            db2.close()
         }
     }
 }
