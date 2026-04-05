@@ -301,8 +301,16 @@ jobs:
           VERSION: ${{ needs.build-native-lib.outputs.version }}
         working-directory: bindings/python
         run: |
-          # Convert SemVer prerelease (0.2.3-dev.abc1234) to PEP 440 (0.2.3.devabc1234)
-          PY_VERSION=$(echo "$VERSION" | sed 's/-dev\.\(.*\)/.dev\1/' | tr -d '[:space:]')
+          # Convert SemVer prerelease (0.2.3-dev.abc1234) to PEP 440 (0.2.3.devN)
+          # PEP 440 requires .devN where N is an integer, so convert hex SHA to decimal
+          if [[ "$VERSION" == *-dev.* ]]; then
+            BASE_VER="${VERSION%%-dev.*}"
+            HEX_SHA="${VERSION##*-dev.}"
+            DEV_NUM=$(printf '%d' "0x${HEX_SHA}" 2>/dev/null || echo "0")
+            PY_VERSION="${BASE_VER}.dev${DEV_NUM}"
+          else
+            PY_VERSION="$VERSION"
+          fi
           printf '%s' "$PY_VERSION" > VERSION
 
           cp ../uniffi/generated/chrondb.py chrondb/_generated/
@@ -738,7 +746,7 @@ jobs:
 
           cp bindings/go/go.mod "${PKG_DIR}/"
           cp bindings/go/chrondb.go "${PKG_DIR}/"
-          cp bindings/go/chrondb_test.go "${PKG_DIR}/"
+          cp bindings/go/client_test.go "${PKG_DIR}/"
           cp target/libchrondb.${{ matrix.lib_ext }} "${PKG_DIR}/lib/"
           cp target/libchrondb.h "${PKG_DIR}/include/" || true
           cp target/graal_isolate.h "${PKG_DIR}/include/" || true
