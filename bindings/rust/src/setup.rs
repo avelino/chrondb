@@ -5,7 +5,7 @@
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::error::{ChronDBError, Result};
@@ -126,14 +126,51 @@ fn download_library() -> std::result::Result<(), String> {
         .unpack(&temp_dir)
         .map_err(|e| format!("Failed to extract archive: {}", e))?;
 
+    flatten_extracted_archive(&temp_dir, &lib_dir)?;
+
+    // Clean up temp dir
+    fs::remove_dir_all(&temp_dir).ok();
+
+    // Verify library was installed
+    let lib_name = get_lib_name();
+    if !lib_dir.join(lib_name).exists() {
+        return Err(format!(
+            "Library {} was not found after extraction",
+            lib_name
+        ));
+    }
+
+    eprintln!("[chrondb] Library installed successfully!");
+    Ok(())
+}
+
+/// Flattens an extracted archive's `lib/` and `include/` subdirectories into `lib_dir`.
+fn flatten_extracted_archive(temp_dir: &Path, lib_dir: &Path) -> std::result::Result<(), String> {
+    fs::create_dir_all(lib_dir).map_err(|e| format!("Failed to create lib directory: {}", e))?;
+
+    // Some releases (e.g. macOS aarch64) ship files flat at the archive root
+    // instead of nested under a wrapping directory with lib/+include/.
+    if temp_dir.join(get_lib_name()).exists() {
+        for entry in
+            fs::read_dir(temp_dir).map_err(|e| format!("Failed to read temp directory: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let dest = lib_dir.join(entry.file_name());
+            fs::copy(entry.path(), &dest)
+                .map_err(|e| format!("Failed to copy {}: {}", entry.path().display(), e))?;
+        }
+        return Ok(());
+    }
+
     // Find the extracted directory and flatten lib/ and include/ into lib_dir
-    let entries: Vec<_> = fs::read_dir(&temp_dir)
+    let entries: Vec<_> = fs::read_dir(temp_dir)
         .map_err(|e| format!("Failed to read temp directory: {}", e))?
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .collect();
-
-    fs::create_dir_all(&lib_dir).map_err(|e| format!("Failed to create lib directory: {}", e))?;
 
     if let Some(extracted) = entries.first() {
         let extracted_path = extracted.path();
@@ -163,24 +200,11 @@ fn download_library() -> std::result::Result<(), String> {
                     .map_err(|e| format!("Failed to copy {}: {}", entry.path().display(), e))?;
             }
         }
+
+        Ok(())
     } else {
-        return Err("Archive did not contain expected directory structure".to_string());
+        Err("Archive did not contain expected directory structure".to_string())
     }
-
-    // Clean up temp dir
-    fs::remove_dir_all(&temp_dir).ok();
-
-    // Verify library was installed
-    let lib_name = get_lib_name();
-    if !lib_dir.join(lib_name).exists() {
-        return Err(format!(
-            "Library {} was not found after extraction",
-            lib_name
-        ));
-    }
-
-    eprintln!("[chrondb] Library installed successfully!");
-    Ok(())
 }
 
 /// Ensures the native library is installed.
@@ -397,6 +421,43 @@ mod tests {
             url,
             "https://github.com/avelino/chrondb/releases/download/latest/libchrondb-latest-macos-aarch64.tar.gz"
         );
+    }
+
+    #[test]
+    fn test_flatten_extracted_archive_with_flat_layout() {
+        // Reproduces the real macOS aarch64 release layout: files sit flat at
+        // the archive root, with no wrapping directory and no lib/+include/ split.
+        let temp_dir = TempDir::new().unwrap();
+        let lib_dir = TempDir::new().unwrap();
+
+        File::create(temp_dir.path().join(get_lib_name())).unwrap();
+        File::create(temp_dir.path().join("libchrondb.h")).unwrap();
+
+        let result = flatten_extracted_archive(temp_dir.path(), lib_dir.path());
+
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert!(lib_dir.path().join(get_lib_name()).exists());
+    }
+
+    #[test]
+    fn test_flatten_extracted_archive_with_nested_layout() {
+        // Legacy/other-platform layout: <wrapping-dir>/lib/* + <wrapping-dir>/include/*
+        let temp_dir = TempDir::new().unwrap();
+        let lib_dir = TempDir::new().unwrap();
+
+        let wrapping = temp_dir.path().join("chrondb-macos-aarch64");
+        let lib_subdir = wrapping.join("lib");
+        let include_subdir = wrapping.join("include");
+        fs::create_dir_all(&lib_subdir).unwrap();
+        fs::create_dir_all(&include_subdir).unwrap();
+        File::create(lib_subdir.join(get_lib_name())).unwrap();
+        File::create(include_subdir.join("libchrondb.h")).unwrap();
+
+        let result = flatten_extracted_archive(temp_dir.path(), lib_dir.path());
+
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert!(lib_dir.path().join(get_lib_name()).exists());
+        assert!(lib_dir.path().join("libchrondb.h").exists());
     }
 
     #[test]
