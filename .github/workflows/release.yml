@@ -10,6 +10,7 @@ on:
       - "bindings/**"
       - "dev/chrondb/shared_library.clj"
       - "VERSION"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
 
 permissions:
