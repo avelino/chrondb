@@ -21,6 +21,7 @@
             [chrondb.util.logging :as log]
             [clojure.string :as str])
   (:import [java.io ByteArrayInputStream]
+           [java.nio.charset StandardCharsets]
            [java.util Date TimeZone]
            [org.eclipse.jgit.dircache DirCache DirCacheEntry]
            [org.eclipse.jgit.api Git]
@@ -157,7 +158,7 @@
              ^CommitBuilder commit (doto (CommitBuilder.)
                                      (.setAuthor author)
                                      (.setCommitter author)
-                                     (.setEncoding Constants/CHARACTER_ENCODING)
+                                     (.setEncoding StandardCharsets/UTF_8)
                                      (.setMessage ^String message)
                                      (.setTreeId index-tree-id))]
 
