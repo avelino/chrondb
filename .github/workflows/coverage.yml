@@ -18,7 +18,7 @@ jobs:
     env:
       JAVA_OPTS: "-XX:+UseG1GC -Xmx3g -Xms1g"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
         with:
@@ -26,13 +26,13 @@ jobs:
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: DeLaGuardo/setup-clojure@3fe9b3ae632c6758d0b7757b0838606ef4287b08 # 13.4
+      - uses: DeLaGuardo/setup-clojure@f556541eb28a9303896cee0679ba9f60b898300f # 13.5
         with:
           cli: 1.12.3.1577
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache Clojure dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.m2/repository
