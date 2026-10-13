@@ -56,6 +56,8 @@
    "org.slf4j.helpers.NOPLoggerFactory"
    "org.slf4j.helpers.NOPLogger"
    "org.slf4j.LoggerFactory"
+   "org.slf4j.helpers.Reporter"
+   "org.apache.lucene.store.FilterIndexInput"
    "org.slf4j.simple.OutputChoice$1"
    "org.eclipse.jgit.util.RawParseUtils"
    "org.eclipse.jgit.lib.ObjectId"
