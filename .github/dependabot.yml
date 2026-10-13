@@ -1,0 +1,58 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+  - package-ecosystem: cargo
+    directories: ["/bindings/rust", "/bindings/uniffi", "/bindings/node"]
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /bindings/node
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /bindings/python
+    schedule:
+      interval: weekly
+    groups:
+      pip:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /bindings/go
+    schedule:
+      interval: weekly
+    groups:
+      gomod:
+        patterns: ["*"]
+  - package-ecosystem: bundler
+    directory: /bindings/ruby
+    schedule:
+      interval: weekly
+    groups:
+      bundler:
+        patterns: ["*"]
+  - package-ecosystem: pub
+    directory: /bindings/dart
+    schedule:
+      interval: weekly
+    groups:
+      pub:
+        patterns: ["*"]
+  - package-ecosystem: gradle
+    directory: /bindings/kotlin
+    schedule:
+      interval: weekly
+    groups:
+      gradle:
+        patterns: ["*"]

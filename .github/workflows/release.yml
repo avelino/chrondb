@@ -12,6 +12,9 @@ on:
       - "VERSION"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -33,7 +36,7 @@ jobs:
       release_tag: ${{ steps.version.outputs.release_tag }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Determine version
         id: version
@@ -64,19 +67,19 @@ jobs:
             exit 1
           fi
 
-      - uses: DeLaGuardo/setup-clojure@13.4
+      - uses: DeLaGuardo/setup-clojure@3fe9b3ae632c6758d0b7757b0838606ef4287b08 # 13.4
         with:
           cli: 1.12.3.1577
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: graalvm/setup-graalvm@v1
+      - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
         with:
           java-version: "21"
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache Clojure dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.m2/repository
@@ -92,7 +95,7 @@ jobs:
       - name: List output files
         run: ls -la target/libchrondb* target/graal_isolate* || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: |
@@ -117,9 +120,9 @@ jobs:
           - os: ubuntu-22.04
             arch: x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
@@ -159,7 +162,7 @@ jobs:
 
           tar -czf "chrondb-rust-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-rust-${{ steps.platform.outputs.name }}
           path: chrondb-rust-*.tar.gz
@@ -170,9 +173,9 @@ jobs:
     name: "Publish Rust crate to crates.io"
     environment: tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
       - name: Update crate version
         working-directory: bindings/rust
@@ -205,17 +208,17 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -242,7 +245,7 @@ jobs:
             --language swift \
             --out-dir generated/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uniffi-${{ runner.os }}-${{ matrix.arch }}
           path: |
@@ -268,19 +271,19 @@ jobs:
             lib_ext: so
             wheel_tag: manylinux_2_35_x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uniffi-${{ runner.os }}-${{ matrix.arch }}
           path: bindings/uniffi/
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
 
@@ -337,7 +340,7 @@ jobs:
             cp "$RETAGGED" "chrondb-latest-py3-none-${WHEEL_TAG}.whl"
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-python-${{ steps.platform.outputs.name }}
           path: bindings/python/dist/chrondb-*.whl
@@ -350,13 +353,13 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: chrondb-python-*
           path: dist/
           merge-multiple: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
 
@@ -388,19 +391,19 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uniffi-${{ runner.os }}-${{ matrix.arch }}
           path: bindings/uniffi/
 
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1.329.0
         with:
           ruby-version: "3.3"
 
@@ -415,7 +418,7 @@ jobs:
         working-directory: bindings/ruby
         run: gem build chrondb.gemspec
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-ruby-${{ matrix.arch }}
           path: bindings/ruby/*.gem
@@ -426,13 +429,13 @@ jobs:
     name: "Publish Ruby gem"
     environment: tests
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: chrondb-ruby-*
           path: gems/
           merge-multiple: true
 
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1.329.0
         with:
           ruby-version: "3.3"
 
@@ -461,18 +464,18 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Build native addon
         working-directory: bindings/node
@@ -492,7 +495,7 @@ jobs:
         working-directory: bindings/node
         run: npm pack
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-node-${{ matrix.arch }}
           path: bindings/node/*.tgz
@@ -503,15 +506,15 @@ jobs:
     name: "Publish Node.js to npm"
     environment: tests
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: chrondb-node-*
           path: packages/
           merge-multiple: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to npm
@@ -539,14 +542,14 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uniffi-${{ runner.os }}-${{ matrix.arch }}
           path: bindings/uniffi/
@@ -590,7 +593,7 @@ jobs:
 
           tar -czf "chrondb-swift-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-swift-${{ steps.platform.outputs.name }}
           path: chrondb-swift-*.tar.gz
@@ -602,14 +605,14 @@ jobs:
     runs-on: ubuntu-22.04
     name: "Package Kotlin binding (JVM)"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: DeLaGuardo/setup-clojure@13.4
+      - uses: DeLaGuardo/setup-clojure@3fe9b3ae632c6758d0b7757b0838606ef4287b08 # 13.4
         with:
           cli: 1.12.3.1577
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: graalvm/setup-graalvm@v1
+      - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
         with:
           java-version: "21"
           distribution: "graalvm"
@@ -639,7 +642,7 @@ jobs:
 
           tar -czf "chrondb-kotlin-${VERSION}.tar.gz" "${PKG_DIR}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-kotlin
           path: chrondb-kotlin-*.tar.gz
@@ -661,9 +664,9 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
@@ -696,7 +699,7 @@ jobs:
 
           tar -czf "chrondb-dart-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-dart-${{ steps.platform.outputs.name }}
           path: chrondb-dart-*.tar.gz
@@ -718,9 +721,9 @@ jobs:
             arch: x86_64
             lib_ext: so
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: libchrondb-${{ runner.os }}-${{ matrix.arch }}
           path: target/
@@ -753,7 +756,7 @@ jobs:
 
           tar -czf "chrondb-go-${VERSION}-${PLATFORM}.tar.gz" "${PKG_DIR}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrondb-go-${{ steps.platform.outputs.name }}
           path: chrondb-go-*.tar.gz
@@ -767,9 +770,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts/
 
@@ -857,7 +860,7 @@ jobs:
           git push origin :refs/tags/latest || true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.build-native-lib.outputs.release_tag }}
           name: ${{ needs.build-native-lib.outputs.release_tag == 'latest' && 'Latest (main)' || needs.build-native-lib.outputs.release_tag }}
