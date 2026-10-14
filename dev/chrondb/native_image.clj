@@ -133,6 +133,32 @@
   (let [targets #{}]
     (vec (filter targets classes))))
 
+;; JGit reads config enums with Config/getEnum, which calls the enum's
+;; static values() reflectively (Config.allValuesOf). Any enum it parses that
+;; is missing here fails at run time with "Enumerated values of type ... not
+;; available". JGit 7 added CoreConfig$TrustStat and CoreConfig$TrustLooseRefStat,
+;; which broke repository init in the native library after the JGit 7 upgrade.
+;; This lists every nested *Config enum in JGit 7.8.
+(def jgit-config-enums
+  ["org.eclipse.jgit.diff.DiffConfig$RenameDetectionType"
+   "org.eclipse.jgit.lib.BranchConfig$BranchRebaseMode"
+   "org.eclipse.jgit.lib.CommitConfig$CleanupMode"
+   "org.eclipse.jgit.lib.CoreConfig$AutoCRLF"
+   "org.eclipse.jgit.lib.CoreConfig$CheckStat"
+   "org.eclipse.jgit.lib.CoreConfig$EOL"
+   "org.eclipse.jgit.lib.CoreConfig$EolStreamType"
+   "org.eclipse.jgit.lib.CoreConfig$SymLinks"
+   "org.eclipse.jgit.lib.CoreConfig$TrustLooseRefStat"
+   "org.eclipse.jgit.lib.CoreConfig$TrustStat"
+   "org.eclipse.jgit.lib.GcConfig$PackRefsMode"
+   "org.eclipse.jgit.lib.GpgConfig$GpgFormat"
+   "org.eclipse.jgit.lib.SubmoduleConfig$FetchRecurseSubmodulesMode"
+   "org.eclipse.jgit.transport.HttpConfig$HttpRedirectMode"
+   "org.eclipse.jgit.transport.PushConfig$PushDefault"
+   "org.eclipse.jgit.transport.PushConfig$PushRecurseSubmodulesMode"
+   "org.eclipse.jgit.transport.TransferConfig$FsckMode"
+   "org.eclipse.jgit.transport.TransferConfig$ProtocolVersion"])
+
 (def base-reflect-config
   [{:name "org.eclipse.jgit.internal.JGitText"
     :allDeclaredConstructors true
@@ -626,7 +652,11 @@
           data-clj (clojure-data-classes)
           ;; Filter out clojure.data.json__init to avoid initialization issues
           filtered-data-clj (remove #(string/ends-with? % "__init") data-clj)
-          reflect-config (into base-reflect-config
+          reflect-config (into (into base-reflect-config
+                                     (for [cls jgit-config-enums]
+                                       {:name cls
+                                        :allDeclaredMethods true
+                                        :allPublicMethods true}))
                                (for [cls (concat clj-classes chrondb-clj filtered-data-clj)]
                                  {:name cls
                                   :allDeclaredConstructors true
