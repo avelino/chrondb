@@ -554,6 +554,12 @@
                             stack-size-arg)
         base-args ["-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
                    "-Dorg.slf4j.simpleLogger.log.org.eclipse.jetty.server=warn"
+                   ;; Lucene 9.12 on JDK 21 picks the MemorySegment mmap provider,
+                   ;; whose static init loads PosixNativeAccess (a Panama libc
+                   ;; downcall). MMapDirectory is in the build-time list, so that
+                   ;; class would land in the image heap and native-image refuses
+                   ;; to build. Keep the MappedByteBuffer provider, as with 9.8.
+                   "-Dorg.apache.lucene.store.MMapDirectory.enableMemorySegments=false"
                    "--features=clj_easy.graal_build_time.InitClojureClasses"]
         path-sep (System/getProperty "path.separator")
         classpath (string/join path-sep ["target/classes" jar-path])
