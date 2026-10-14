@@ -57,13 +57,14 @@
                                  (concat svm-jars [uberjar-path]))
           javac (str (or graalvm-home "") "/bin/javac")
           javac-cmd (if (.exists (io/file javac)) javac "javac")
-          java-file (.getAbsolutePath (io/file java-src-dir "chrondb" "lib" "ChronDBLib.java"))
-          {:keys [exit out err]} (shell/sh javac-cmd
+          java-files (mapv #(.getAbsolutePath (io/file java-src-dir "chrondb" "lib" %))
+                           ["ChronDBLib.java" "LuceneNativeAccessSubstitutions.java"])
+          {:keys [exit out err]} (apply shell/sh javac-cmd
                                            "-cp" classpath
                                            "-d" java-class-dir
                                            "-source" "11"
                                            "-target" "11"
-                                           java-file)]
+                                           java-files)]
       (when (seq out) (println out))
       (when (seq err) (println err))
       (when-not (zero? exit)
