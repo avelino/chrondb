@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "1.9.22"
+    kotlin("jvm") version "2.4.21"
 }
 
 group = "run.avelino.chrondb"
@@ -11,8 +11,8 @@ repositories {
 
 dependencies {
     // ChronDB runs on the JVM — use Clojure interop directly, no FFI needed
-    implementation("org.clojure:clojure:1.11.1")
-    implementation("org.json:json:20240303")
+    implementation("org.clojure:clojure:1.12.6")
+    implementation("org.json:json:20260814")
 
     // ChronDB uberjar (added to classpath at runtime or via local file)
     implementation(files("../../target/chrondb.jar"))
