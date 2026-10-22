@@ -7,6 +7,10 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+    ignore:
+      # setup-swift v3 fails toolchain signature verification (gpg digest-mismatch)
+      - dependency-name: swift-actions/setup-swift
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: cargo
     directories: ["/bindings/rust", "/bindings/uniffi", "/bindings/node"]
     schedule:
