@@ -11,7 +11,7 @@
              org.clojure/tools.cli                     {:mvn/version "1.0.219"}
              org.apache.lucene/lucene-core             {:mvn/version "9.12.3"}
              org.apache.lucene/lucene-queryparser      {:mvn/version "9.12.3"}
-             org.apache.lucene/lucene-analyzers-common {:mvn/version "8.11.2"}
+             org.apache.lucene/lucene-analysis-common   {:mvn/version "9.12.3"}
              org.eclipse.jgit/org.eclipse.jgit         {:mvn/version "7.8.0.202609011348-r"}
              org.eclipse.jgit/org.eclipse.jgit.ssh.apache {:mvn/version "7.8.0.202609011348-r"
                                                                         :exclusions [org.apache.sshd/sshd-sftp]}
