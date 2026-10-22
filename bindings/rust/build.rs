@@ -56,7 +56,7 @@ fn download_library(lib_dir: &PathBuf) -> Result<(), Box<dyn std::error::Error>>
     eprintln!("cargo:warning=Installing to {}", lib_dir.display());
 
     let response = ureq::get(&url).call()?;
-    let mut reader = response.into_reader();
+    let mut reader = response.into_body().into_reader();
 
     let decoder = flate2::read::GzDecoder::new(&mut reader);
     let mut archive = tar::Archive::new(decoder);
