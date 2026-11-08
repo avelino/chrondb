@@ -404,7 +404,7 @@ jobs:
           name: uniffi-${{ runner.os }}-${{ matrix.arch }}
           path: bindings/uniffi/
 
-      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+      - uses: ruby/setup-ruby@de492cf36cbab201753d720ce4f4e336cd688c94 # v1.336.0
         with:
           ruby-version: "3.3"
 
@@ -436,7 +436,7 @@ jobs:
           path: gems/
           merge-multiple: true
 
-      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+      - uses: ruby/setup-ruby@de492cf36cbab201753d720ce4f4e336cd688c94 # v1.336.0
         with:
           ruby-version: "3.3"
 
@@ -861,7 +861,7 @@ jobs:
           git push origin :refs/tags/latest || true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ needs.build-native-lib.outputs.release_tag }}
           name: ${{ needs.build-native-lib.outputs.release_tag == 'latest' && 'Latest (main)' || needs.build-native-lib.outputs.release_tag }}
