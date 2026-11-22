@@ -11,7 +11,7 @@ repositories {
 
 dependencies {
     // ChronDB runs on the JVM — use Clojure interop directly, no FFI needed
-    implementation("org.clojure:clojure:1.12.6")
+    implementation("org.clojure:clojure:1.12.7")
     implementation("org.json:json:20260814")
 
     // ChronDB uberjar (added to classpath at runtime or via local file)
