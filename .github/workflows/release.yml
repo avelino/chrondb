@@ -26,9 +26,9 @@ jobs:
     name: "Build libchrondb on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
           - os: ubuntu-22.04
             arch: x86_64
@@ -114,9 +114,9 @@ jobs:
     name: "Package Rust binding on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
           - os: ubuntu-22.04
             arch: x86_64
@@ -200,9 +200,9 @@ jobs:
     name: "Build UniFFI on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04
@@ -261,12 +261,12 @@ jobs:
     name: "Package Python wheel on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
-            wheel_tag: macosx_14_0_arm64
+            wheel_tag: macosx_15_0_arm64
           - os: ubuntu-22.04
             arch: x86_64
             lib_ext: so
@@ -383,9 +383,9 @@ jobs:
     name: "Package Ruby gem on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04
@@ -456,9 +456,9 @@ jobs:
     name: "Build Node.js on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04
@@ -534,9 +534,9 @@ jobs:
     name: "Package Swift binding on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04
@@ -656,9 +656,9 @@ jobs:
     name: "Package Dart binding on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04
@@ -713,9 +713,9 @@ jobs:
     name: "Package Go binding on ${{ matrix.os }}"
     strategy:
       matrix:
-        os: ["macos-14", "ubuntu-22.04"]
+        os: ["macos-15", "ubuntu-22.04"]
         include:
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             lib_ext: dylib
           - os: ubuntu-22.04

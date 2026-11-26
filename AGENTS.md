@@ -357,7 +357,7 @@ docker run --rm -p 3000:3000 -p 6379:6379 -p 5432:5432 avelino/chrondb
 4. Run `test-redis-sequential` (sequential)
 
 ### Shared Library (`build-shared-library.yml`)
-1. Build on macOS-14 and Ubuntu-22.04
+1. Build on macOS-15 and Ubuntu-22.04
 2. Generate `libchrondb.so` / `libchrondb.dylib`
 3. Test Rust bindings with artifacts
 4. Test Python bindings with artifacts
